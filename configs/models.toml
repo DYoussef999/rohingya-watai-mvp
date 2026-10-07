@@ -1,0 +1,45 @@
+# Real models instead of stubs. Needs:  pip install -e ".[whisper,lexicon]"
+# First use downloads the model weights (about 3 GB in total); after that it all runs offline.
+# Stock Whisper does not know Rohingya, so translations will be rough until it is fine-tuned.
+
+[pipeline]
+mode = "direct"
+synthesizer = "windows"   # read English aloud with a built-in Windows voice; "" for none
+read_aloud = true         # the app speaks each translation automatically
+
+[synthesizer]
+voice = "Zira"            # part of a Windows voice name ("David", "Zira")
+rate = 0                  # -10 (slow) to 10 (fast)
+
+[speech_translator]
+backend = "whisper"
+model = "small"
+device = "auto"
+source_language = "bn"    # Bengali, the closest language Whisper supports
+
+[speech_to_text]
+backend = "echo"
+
+[text_translator]
+backend = "echo"
+
+[audio_embedder]
+backend = "wav2vec2"
+model = "facebook/wav2vec2-xls-r-300m"
+device = "auto"
+
+[image_labeler]
+backend = "siglip"
+model = "google/siglip-base-patch16-224"
+device = "auto"
+
+[lexicon]
+path = "data/lexicon"
+# Not yet calibrated for XLS-R: record a few words from several speakers and adjust
+# until the same word matches and different words don't.
+match_threshold = 0.9
+min_speakers = 3
+max_conflict_share = 0.25
+vision_min_score = 0.01     # SigLIP scores are low even when right; the meaning must also be the top label
+prompts = "data/prompts"            # pictures named after what they show
+vocabulary = "configs/vision_vocabulary.txt"
