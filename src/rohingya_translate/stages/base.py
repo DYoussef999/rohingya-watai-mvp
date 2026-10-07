@@ -34,6 +34,14 @@ class TextResult:
     confidence: float | None = None
 
 
+@dataclass
+class Label:
+    """A candidate English label for an image, scored 0-1 (independently, not summing to 1)."""
+
+    text: str
+    score: float
+
+
 @runtime_checkable
 class SpeechTranslator(Protocol):
     """Speech in one language -> English text, in a single model ("direct" mode)."""
@@ -67,3 +75,17 @@ class ImageTextReader(Protocol):
     """Image -> text found in it (e.g. Hanifi Rohingya signage). Not wired in yet."""
 
     def read_image(self, image: np.ndarray) -> TextResult: ...
+
+
+@runtime_checkable
+class ImageLabeler(Protocol):
+    """Image (H x W x 3 RGB uint8) -> how well each candidate English label fits, best first."""
+
+    def label_image(self, image: np.ndarray, candidates: list[str]) -> list[Label]: ...
+
+
+@runtime_checkable
+class AudioEmbedder(Protocol):
+    """Speech clip -> unit-length vector. Clips of the same word should land close together."""
+
+    def embed(self, audio: Audio) -> np.ndarray: ...

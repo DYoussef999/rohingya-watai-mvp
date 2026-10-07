@@ -6,7 +6,7 @@ import numpy as np
 
 from rohingya_translate.audio import Audio
 from rohingya_translate.config import StageConfig
-from rohingya_translate.stages.base import Segment, TextResult
+from rohingya_translate.stages.base import Label, Segment, TextResult
 
 
 class EchoBackend:
@@ -14,6 +14,7 @@ class EchoBackend:
 
     def __init__(self, config: StageConfig | None = None) -> None:
         self.config = config or StageConfig()
+        self.name = "echo"
 
     def translate_speech(self, audio: Audio) -> TextResult:
         return self._describe(audio, language="en")
@@ -26,6 +27,17 @@ class EchoBackend:
 
     def synthesize(self, text: str) -> Audio:
         return Audio(np.zeros(0, dtype=np.float32))
+
+    def embed(self, audio: Audio) -> np.ndarray:
+        """Coarse spectrum shape: identical clips match, different tones don't. Not for real use."""
+        spectrum = np.abs(np.fft.rfft(audio.samples, n=4096))
+        bands = np.array([band.sum() for band in np.array_split(spectrum, 64)], dtype=np.float32)
+        norm = np.linalg.norm(bands)
+        return bands / norm if norm else bands
+
+    def label_image(self, image: np.ndarray, candidates: list[str]) -> list[Label]:
+        """Sees nothing: every candidate scores 0."""
+        return [Label(c, 0.0) for c in candidates]
 
     def _describe(self, audio: Audio, language: str) -> TextResult:
         text = f"<{audio.duration:.1f}s of audio>"

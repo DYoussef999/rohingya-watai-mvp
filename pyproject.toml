@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "numpy>=1.26",
+    "sounddevice>=0.4",  # microphone and playback in the app
 ]
 
 [project.optional-dependencies]
@@ -18,12 +19,18 @@ dependencies = [
 whisper = ["faster-whisper>=1.0"]
 # Fine-tuning Whisper on Rohingya recordings.
 train = ["torch>=2.2", "transformers>=4.40", "datasets>=2.18", "peft>=0.10"]
+# Self-growing dictionary: XLS-R audio embeddings, SigLIP image labels, webcam (all Apache 2.0).
+lexicon = ["torch>=2.6", "transformers>=4.45", "sentencepiece>=0.2", "protobuf>=4.25", "opencv-python-headless>=4.9"]
 # Computer vision (later: e.g. reading Hanifi Rohingya / Rohingyalish signage).
 vision = ["opencv-python-headless>=4.9"]
 dev = ["pytest>=8", "ruff>=0.5"]
 
 [project.scripts]
 rtranslate = "rohingya_translate.cli:main"
+rlexicon = "rohingya_translate.lexicon_cli:main"
+
+[project.gui-scripts]
+rtranslate-gui = "rohingya_translate.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

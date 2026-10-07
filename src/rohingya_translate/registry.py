@@ -21,9 +21,37 @@ def _whisper(config: StageConfig) -> Any:
     return WhisperBackend(config)
 
 
+def _siglip(config: StageConfig) -> Any:
+    from rohingya_translate.stages.siglip import SiglipBackend
+
+    return SiglipBackend(config)
+
+
+def _wav2vec2(config: StageConfig) -> Any:
+    from rohingya_translate.stages.wav2vec2 import Wav2Vec2Embedder
+
+    return Wav2Vec2Embedder(config)
+
+
+def _demo(config: StageConfig) -> Any:
+    from rohingya_translate.stages.demo import DemoBackend
+
+    return DemoBackend(config)
+
+
+def _windows(config: StageConfig) -> Any:
+    from rohingya_translate.stages.windows_tts import WindowsSpeechBackend
+
+    return WindowsSpeechBackend(config)
+
+
 BACKENDS: dict[str, Callable[[StageConfig], Any]] = {
     "echo": _echo,
     "whisper": _whisper,
+    "siglip": _siglip,
+    "wav2vec2": _wav2vec2,
+    "demo": _demo,
+    "windows": _windows,
 }
 
 

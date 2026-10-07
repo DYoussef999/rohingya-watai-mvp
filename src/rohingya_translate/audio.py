@@ -43,6 +43,30 @@ def load_wav(path: str | Path) -> Audio:
     return Audio(resample(samples, rate, SAMPLE_RATE))
 
 
+def save_wav(audio: Audio, path: str | Path) -> None:
+    """Write ``audio`` as a mono 16-bit PCM WAV file."""
+    pcm = (np.clip(audio.samples, -1.0, 1.0) * 32767).astype("<i2")
+    with wave.open(str(path), "wb") as f:
+        f.setnchannels(1)
+        f.setsampwidth(2)
+        f.setframerate(audio.sample_rate)
+        f.writeframes(pcm.tobytes())
+
+
+def trim_silence(audio: Audio, threshold_db: float = -40.0, frame_s: float = 0.02) -> Audio:
+    """Cut quiet stretches from both ends (relative to the loudest frame)."""
+    frame = max(1, int(frame_s * audio.sample_rate))
+    n_frames = len(audio.samples) // frame
+    if n_frames == 0:
+        return audio
+    frames = audio.samples[: n_frames * frame].reshape(n_frames, frame)
+    rms = np.sqrt((frames**2).mean(axis=1))
+    if rms.max() == 0:
+        return audio
+    loud = np.flatnonzero(20 * np.log10(rms / rms.max() + 1e-12) > threshold_db)
+    return Audio(audio.samples[loud[0] * frame : (loud[-1] + 1) * frame], audio.sample_rate)
+
+
 def resample(samples: np.ndarray, src_rate: int, dst_rate: int) -> np.ndarray:
     """Linear-interpolation resampling. Good enough for speech models."""
     if src_rate == dst_rate or len(samples) == 0:

@@ -7,7 +7,12 @@
 #            transcription convention (Rohingyalish or Hanifi) and a text model.
 mode = "direct"
 # Optional: speak the English result aloud. "" disables it.
-synthesizer = ""
+synthesizer = "windows"   # read English aloud with a built-in Windows voice; "" for none
+read_aloud = true         # the app speaks each translation automatically
+
+[synthesizer]
+voice = "Zira"            # part of a Windows voice name ("David", "Zira")
+rate = 0                  # -10 (slow) to 10 (fast)
 
 [speech_translator]
 backend = "echo"          # "echo" (test stub) or "whisper"
@@ -24,3 +29,26 @@ model = ""
 [text_translator]
 backend = "echo"
 model = ""
+
+# --- Self-growing dictionary (rlexicon) ---------------------------------------
+
+[audio_embedder]
+# Turns a spoken word into a vector so recordings of the same word can be matched.
+backend = "echo"          # "echo" (test stub) or "wav2vec2"
+model = ""                # default for wav2vec2: "facebook/wav2vec2-xls-r-300m"
+device = "auto"
+
+[image_labeler]
+# Checks whether a photo shows what a word is said to mean.
+backend = "echo"          # "echo" (sees nothing) or "siglip"
+model = ""                # default for siglip: "google/siglip-base-patch16-224"
+device = "auto"
+
+[lexicon]
+path = "data/lexicon"
+match_threshold = 0.9     # calibrate per audio embedder on real recordings
+min_speakers = 3          # speakers who must agree before an entry is "verified"
+max_conflict_share = 0.25
+vision_min_score = 0.01     # SigLIP scores are low even when right; the meaning must also be the top label
+prompts = "data/prompts"            # pictures named after what they show
+vocabulary = "configs/vision_vocabulary.txt"

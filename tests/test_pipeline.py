@@ -48,3 +48,26 @@ def test_synthesizer_is_optional():
 def test_unknown_backend_is_rejected():
     with pytest.raises(ValueError, match="unknown backend"):
         create_backend(StageConfig(backend="nope"), SpeechTranslator)
+
+
+def test_voice_settings_load():
+    config = Config.from_dict({"pipeline": {"synthesizer": "windows", "read_aloud": False},
+                               "synthesizer": {"voice": "Zira", "rate": 2}})
+    assert config.voice.backend == "windows"
+    assert config.voice.options == {"voice": "Zira", "rate": 2}
+    assert config.read_aloud is False
+
+
+def test_speak_false_skips_the_voice():
+    pipeline = Pipeline(Config(synthesizer="echo"))
+    assert pipeline.run(TWO_SECONDS, speak=False).speech is None
+
+
+@pytest.mark.skipif(__import__("sys").platform != "win32", reason="Windows voices only")
+def test_windows_voice_reads_text_aloud():
+    from rohingya_translate.stages.windows_tts import WindowsSpeechBackend
+
+    audio = WindowsSpeechBackend().synthesize("I need clean water.")
+    assert audio.sample_rate == 16_000
+    assert audio.duration > 0.5
+    assert WindowsSpeechBackend().synthesize("  ").duration == 0
