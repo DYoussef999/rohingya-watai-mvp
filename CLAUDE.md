@@ -17,6 +17,9 @@ A speech translator from Rohingya (a mostly spoken, low-resource language) to En
 py -3.11 -m venv .venv && .venv\Scripts\python -m pip install -e ".[dev]"
 .venv\Scripts\python -m pytest
 .venv\Scripts\rtranslate path\to\clip.wav [--config configs\default.toml] [--json]
+.venv\Scripts\rlexicon teach|lookup|see|check|list|export|reembed ...
+run.bat                                   # one-click: sets up .venv, opens the desktop app
+demo.bat                                  # same, with made-up data (data/demo, configs/demo.toml)
 ```
 
 ## Conventions
