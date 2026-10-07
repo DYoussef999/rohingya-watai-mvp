@@ -1,0 +1,26 @@
+# Default pipeline settings. Copy and edit, then pass with --config.
+
+[pipeline]
+# "direct":  speech -> English text in one model (Whisper's translate task).
+#            Needs no Rohingya writing system, so it is the main path.
+# "cascade": speech -> Rohingya transcript -> English text. Needs a
+#            transcription convention (Rohingyalish or Hanifi) and a text model.
+mode = "direct"
+# Optional: speak the English result aloud. "" disables it.
+synthesizer = ""
+
+[speech_translator]
+backend = "echo"          # "echo" (test stub) or "whisper"
+model = "small"           # Whisper size, or a path to a fine-tuned model
+device = "auto"           # "auto", "cpu" or "cuda"
+# Whisper has no Rohingya code. Leave empty to auto-detect, or try "bn"
+# (Bengali, the closest supported language) as a starting hint.
+source_language = ""
+
+[speech_to_text]
+backend = "echo"
+model = ""
+
+[text_translator]
+backend = "echo"
+model = ""

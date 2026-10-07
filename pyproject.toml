@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rohingya-translate"
+version = "0.1.0"
+description = "Speech translation from Rohingya to English, running on-device."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+# Speech recognition / speech translation with Whisper (MIT code + MIT weights).
+whisper = ["faster-whisper>=1.0"]
+# Fine-tuning Whisper on Rohingya recordings.
+train = ["torch>=2.2", "transformers>=4.40", "datasets>=2.18", "peft>=0.10"]
+# Computer vision (later: e.g. reading Hanifi Rohingya / Rohingyalish signage).
+vision = ["opencv-python-headless>=4.9"]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+rtranslate = "rohingya_translate.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

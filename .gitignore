@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Audio, datasets and models: never commit recordings of people.
+data/*
+!data/README.md
+models/
+output/
+runs/
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
