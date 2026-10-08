@@ -90,8 +90,18 @@ class App:
         import tkinter as tk
 
         from rohingya_translate.ui import screens
-        from rohingya_translate.ui.theme import BG, MUTED, SEE, SPEAK, TEACH, WORDS, font
-        from rohingya_translate.ui.widgets import IconButton
+        from rohingya_translate.ui.theme import (
+            BG,
+            LINE,
+            MUTED,
+            ON_ACCENT,
+            SEE,
+            SPEAK,
+            TEACH,
+            WORDS,
+            font,
+        )
+        from rohingya_translate.ui.widgets import IconButton, dark_title_bar
 
         self.root, self.s, self.demo = root, scale, demo
         self.config_path = config_path
@@ -101,6 +111,7 @@ class App:
         self.demo_files = None
         self._prompts: dict[str, Path] | None = None
         root.configure(bg=BG)
+        dark_title_bar(root)
 
         header = tk.Frame(root, bg=BG, padx=int(20 * scale), pady=int(12 * scale))
         header.pack(fill="x")
@@ -117,10 +128,10 @@ class App:
         IconButton(header, "gear", "", self.settings, colour=MUTED, size=26, filled=False,
                    scale=scale).pack(side="right")
         if demo:
-            tk.Label(header, text=" DEMO DATA ", font=font(11, "bold"), fg="white", bg=TEACH,
+            tk.Label(header, text=" DEMO DATA ", font=font(11, "bold"), fg=ON_ACCENT, bg=TEACH,
                      padx=6, pady=4).pack(side="right", padx=12 * scale)
 
-        tk.Frame(root, bg="#E3DDD3", height=1).pack(fill="x")
+        tk.Frame(root, bg=LINE, height=1).pack(fill="x")
         self.body = tk.Frame(root, bg=BG)
         self.body.pack(fill="both", expand=True)
         self.status = tk.Label(root, text="", font=font(10), fg=MUTED, bg=BG, anchor="w",
@@ -244,6 +255,7 @@ class App:
             AgreementMeter,
             IconButton,
             StatusBadge,
+            dark_title_bar,
             picture_or_icon,
             text_block,
         )
@@ -253,6 +265,7 @@ class App:
         win = tk.Toplevel(self.root, bg=BG, padx=int(24 * s), pady=int(20 * s))
         win.title(entry.meaning)
         win.transient(self.root)
+        dark_title_bar(win)
         picture_or_icon(win, self.picture_for(entry.meaning), int(220 * s), colour, bg=BG).pack()
         tk.Label(win, text=entry.meaning, font=font(24, "bold"), fg=INK, bg=BG).pack(
             pady=(10 * s, 4 * s))
@@ -322,12 +335,13 @@ class App:
         import tkinter as tk
         from tkinter import filedialog
 
-        from rohingya_translate.ui.theme import BG, INK, MUTED, font
-        from rohingya_translate.ui.widgets import IconButton, text_block
+        from rohingya_translate.ui.theme import BG, GOOD, INK, MUTED, font
+        from rohingya_translate.ui.widgets import IconButton, dark_title_bar, entry, text_block
 
         s = self.s
         win = tk.Toplevel(self.root, bg=BG, padx=int(24 * s), pady=int(20 * s))
         win.title("Settings")
+        dark_title_bar(win)
         win.transient(self.root)
         win.grab_set()
         tk.Label(win, text="Settings file", font=font(14, "bold"), fg=INK, bg=BG).pack(anchor="w")
@@ -336,8 +350,7 @@ class App:
         path = tk.StringVar(value=self.config_path)
         row = tk.Frame(win, bg=BG)
         row.pack(fill="x")
-        tk.Entry(row, textvariable=path, font=font(11), width=60, relief="solid", bd=1).pack(
-            side="left", fill="x", expand=True)
+        entry(row, path, 11, width=60).pack(side="left", fill="x", expand=True, ipady=3)
 
         def browse() -> None:
             chosen = filedialog.askopenfilename(parent=win, initialdir=Path(path.get()).parent,
@@ -363,7 +376,7 @@ class App:
             self.teach.load_pictures()
             self.words.refresh()
 
-        IconButton(win, "check", "Use these settings", apply, colour="#16A34A", size=24,
+        IconButton(win, "check", "Use these settings", apply, colour=GOOD, size=24,
                    layout="row", scale=s).pack(pady=(16, 0))
 
     def _start_demo(self) -> None:

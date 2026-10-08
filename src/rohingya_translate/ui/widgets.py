@@ -13,13 +13,17 @@ from rohingya_translate.ui import icons
 from rohingya_translate.ui.theme import (
     BG,
     FAINT,
+    GOOD,
     INK,
     LINE,
     MUTED,
     NEUTRAL,
+    ON_ACCENT,
+    RAISED,
     RECORD,
     STATUS,
     SURFACE,
+    TEACH,
     WARN,
     font,
     shade,
@@ -87,9 +91,9 @@ class IconButton(tk.Canvas):
         colour = self.colour if self.enabled else NEUTRAL
         if self.filled or self.selected:
             fill = shade(colour, 0.85) if self._hover and self.enabled else colour
-            ink, outline = "white", ""
+            ink, outline = ON_ACCENT, ""
         else:
-            fill = shade(colour, 1.88) if self._hover and self.enabled else SURFACE
+            fill = shade(colour, 1.82) if self._hover and self.enabled else SURFACE
             ink, outline = colour, shade(colour, 1.6)
         icons.round_rect(self, 1, 1, self.w - 1, self.h - 1, 16 * self.s, fill=fill,
                          outline=outline, width=max(1, int(2 * self.s)))
@@ -142,7 +146,7 @@ class MicButton(tk.Canvas):
             self.create_oval(c - ring, c - ring, c + ring, c + ring, fill=shade(RECORD, 1.75),
                              outline="")
             self.create_oval(c - r, c - r, c + r, c + r, fill=RECORD, outline="")
-            icons.draw(self, "stop", c, c, self.d * 0.36, "white", knockout=RECORD)
+            icons.draw(self, "stop", c, c, self.d * 0.36, ON_ACCENT, knockout=RECORD)
             minutes, secs = divmod(int(self.seconds), 60)
             self.create_text(c, self.d + 2 * self.margin + 12 * self.s,
                              text=f"{minutes}:{secs:02d}", fill=RECORD, font=font(14, "bold"))
@@ -156,7 +160,7 @@ class MicButton(tk.Canvas):
             self.create_oval(c - r - 6 * self.s, c - r - 6 * self.s, c + r + 6 * self.s,
                              c + r + 6 * self.s, fill=shade(self.colour, 1.8), outline="")
             self.create_oval(c - r, c - r, c + r, c + r, fill=self.colour, outline="")
-            icons.draw(self, "mic", c, c, self.d * 0.55, "white", knockout=self.colour)
+            icons.draw(self, "mic", c, c, self.d * 0.55, ON_ACCENT, knockout=self.colour)
 
 
 class StatusBadge(tk.Canvas):
@@ -169,9 +173,10 @@ class StatusBadge(tk.Canvas):
         w = h + f.measure(caption) + 12 * scale
         super().__init__(master, width=w, height=h, highlightthickness=0,
                          bg=bg or master.cget("bg"))
-        icons.round_rect(self, 0, 0, w, h, h / 2, fill=colour, outline="")
-        icons.draw(self, icon, h / 2 + 2 * scale, h / 2, h * 0.62, "white", knockout=colour)
-        self.create_text(h + 2 * scale, h / 2, text=caption, fill="white", font=f, anchor="w")
+        tint = shade(colour, 1.78)  # soft pill, bright icon and word: calmer on a dark screen
+        icons.round_rect(self, 0, 0, w, h, h / 2, fill=tint, outline="")
+        icons.draw(self, icon, h / 2 + 2 * scale, h / 2, h * 0.62, colour, knockout=tint)
+        self.create_text(h + 2 * scale, h / 2, text=caption, fill=colour, font=f, anchor="w")
 
 
 class AgreementMeter(tk.Canvas):
@@ -208,7 +213,7 @@ class ConfidenceDots(tk.Canvas):
                          highlightthickness=0, bg=master.cget("bg"))
         value = confidence or 0.0
         filled = round(value * 5)
-        colour = "#16A34A" if value >= 0.7 else "#D97706" if value >= 0.4 else WARN
+        colour = GOOD if value >= 0.7 else TEACH if value >= 0.4 else WARN
         for i in range(5):
             x = r + i * (2 * r + 6 * scale)
             self.create_oval(x - r, 2, x + r, 2 + 2 * r, outline="",
@@ -244,13 +249,55 @@ class Waveform(tk.Canvas):
                              width=max(2, step * 0.5), capstyle="round")
 
 
+class ThinScrollbar(tk.Canvas):
+    """A slim rounded scrollbar (the native Windows one can't be coloured)."""
+
+    def __init__(self, master, command: Callable, bg: str, width: int = 10) -> None:
+        super().__init__(master, width=width, bg=bg, highlightthickness=0)
+        self.command, self.first, self.last = command, 0.0, 1.0
+        self._drag: tuple[int, float] | None = None
+        self._hover = False
+        self.bind("<Configure>", lambda _: self._draw())
+        self.bind("<Enter>", lambda _: self._set_hover(True))
+        self.bind("<Leave>", lambda _: self._set_hover(False))
+        self.bind("<Button-1>", self._press)
+        self.bind("<B1-Motion>", self._move)
+
+    def set(self, first: str, last: str) -> None:
+        self.first, self.last = float(first), float(last)
+        self._draw()
+
+    def _set_hover(self, hover: bool) -> None:
+        self._hover = hover
+        self._draw()
+
+    def _draw(self) -> None:
+        self.delete("all")
+        if self.last - self.first >= 0.999:
+            return  # everything fits: no bar
+        w, h = self.winfo_width(), self.winfo_height()
+        icons.round_rect(self, 2, self.first * h + 2, w - 2, self.last * h - 2, w / 2,
+                         fill=MUTED if self._hover else LINE, outline="")
+
+    def _press(self, event) -> None:
+        h = max(1, self.winfo_height())
+        if not self.first * h <= event.y <= self.last * h:  # click outside the thumb: jump
+            self.command("moveto", event.y / h - (self.last - self.first) / 2)
+        self._drag = (event.y, self.first)
+
+    def _move(self, event) -> None:
+        if self._drag:
+            y0, first0 = self._drag
+            self.command("moveto", first0 + (event.y - y0) / max(1, self.winfo_height()))
+
+
 class ScrollFrame(tk.Frame):
     """A vertically scrolling area; put content in ``.inner``."""
 
     def __init__(self, master, bg: str = BG) -> None:
         super().__init__(master, bg=bg)
         self.canvas = tk.Canvas(self, bg=bg, highlightthickness=0)
-        bar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        bar = ThinScrollbar(self, self.canvas.yview, bg=bg)
         self.inner = tk.Frame(self.canvas, bg=bg)
         self._window = self.canvas.create_window(0, 0, window=self.inner, anchor="nw")
         self.canvas.configure(yscrollcommand=bar.set)
@@ -315,6 +362,32 @@ def picture_or_icon(master, path: Path | None, size: int, colour: str,
                      outline="")
     icons.draw(canvas, "picture", size / 2, size / 2, size * 0.5, shade(colour, 1.4))
     return canvas
+
+
+def entry(master, var: tk.StringVar, size: int = 12, width: int | None = None,
+          accent: str = MUTED) -> tk.Entry:
+    """A dark text box with a thin border that lights up while typing."""
+    extra = {"width": width} if width else {}
+    return tk.Entry(master, textvariable=var, font=font(size), bg=RAISED, fg=INK,
+                    insertbackground=INK, relief="flat", highlightthickness=1,
+                    highlightbackground=LINE, highlightcolor=accent,
+                    selectbackground=shade(accent, 1.5), selectforeground=INK, **extra)
+
+
+def dark_title_bar(window: tk.Misc) -> None:
+    """Ask Windows 10/11 for a dark title bar to match the theme. Ignored elsewhere."""
+    try:
+        import ctypes
+
+        window.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(window.winfo_id())
+        value = ctypes.c_int(1)
+        for attribute in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE: new id, then old one
+            if ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)) == 0:
+                break
+    except (AttributeError, OSError):
+        pass
 
 
 def text_block(master, text: str, size: int = 12, colour: str = MUTED, bg: str = BG,

@@ -20,6 +20,7 @@ from rohingya_translate.ui.theme import (
     INK,
     LINE,
     MUTED,
+    ON_ACCENT,
     SEE,
     SPEAK,
     STATUS,
@@ -38,6 +39,7 @@ from rohingya_translate.ui.widgets import (
     ScrollFrame,
     StatusBadge,
     Waveform,
+    entry,
     picture_or_icon,
     text_block,
 )
@@ -48,6 +50,7 @@ if TYPE_CHECKING:
 AUDIO_TYPES = [("WAV recordings", "*.wav"), ("All files", "*.*")]
 IMAGE_TYPES = [("Pictures", "*.jpg *.jpeg *.png *.bmp *.webp"), ("All files", "*.*")]
 MIN_SECONDS = 0.3
+CAMERA_BG = "#08090C"
 
 
 def title_row(master, icon: str, title: str, colour: str, scale: float) -> tk.Frame:
@@ -156,8 +159,12 @@ class SpeakScreen(Screen):
             self.translate(load_wav(path))
 
     def demo(self) -> None:
-        if self.app.demo_files:
-            self.translate(load_wav(self.app.demo_files.phrase))
+        """Each tap translates the next demo phrase."""
+        files = self.app.demo_files
+        if files and files.phrases:
+            self._demo_next = getattr(self, "_demo_next", 0)
+            self.translate(load_wav(files.phrases[self._demo_next % len(files.phrases)]))
+            self._demo_next += 1
 
     def on_hide(self) -> None:
         if self.recorder.recording:
@@ -331,17 +338,17 @@ class WordsScreen(Screen):
                                if not self.entries else "No words with this colour.", 13)
             empty.grid(row=0, column=0, padx=10, pady=30)
             return
-        for i, (entry, clips) in enumerate(shown):
-            frame = self._card(entry, clips)
+        for i, (word, clips) in enumerate(shown):
+            frame = self._card(word, clips)
             frame.grid(row=i // columns, column=i % columns, padx=int(8 * self.s),
                        pady=int(8 * self.s), sticky="n")
-            self.cards[entry.id] = frame
+            self.cards[word.id] = frame
 
     def _card(self, entry, clips) -> tk.Frame:
         s = self.s
         colour = STATUS[entry.status.value][0]
         frame = tk.Frame(self.scroll.inner, bg=SURFACE, highlightbackground=colour,
-                         highlightthickness=max(2, int(3 * s)), padx=int(12 * s),
+                         highlightthickness=max(1, int(2 * s)), padx=int(12 * s),
                          pady=int(12 * s), cursor="hand2")
         picture = picture_or_icon(frame, self.app.picture_for(entry.meaning), int(150 * s), colour)
         picture.pack()
@@ -437,8 +444,8 @@ class TeachScreen(Screen):
         row = tk.Frame(one, bg=SURFACE)
         row.pack(fill="x", pady=(8 * s, 0))
         tk.Label(row, text="or type:", font=font(11), fg=MUTED, bg=SURFACE).pack(side="left")
-        tk.Entry(row, textvariable=self.meaning, font=font(14), relief="solid", bd=1).pack(
-            side="left", fill="x", expand=True, padx=(8 * s, 0))
+        entry(row, self.meaning, 14, accent=TEACH).pack(
+            side="left", fill="x", expand=True, padx=(8 * s, 0), ipady=3)
         self.meaning.trace_add("write", lambda *_: self._mark_tile())
 
         two = self._step(steps, 1, "2", "mic", "Say it")
@@ -462,8 +469,8 @@ class TeachScreen(Screen):
             icons.draw(c, "person" if label == "Speaker" else "check", 13 * s, 13 * s, 22 * s,
                        MUTED)
             c.pack(side="left")
-            tk.Entry(r, textvariable=var, font=font(12), relief="solid", bd=1, width=14).pack(
-                side="left", fill="x", expand=True, padx=(6 * s, 0))
+            entry(r, var, 12, width=14, accent=TEACH).pack(
+                side="left", fill="x", expand=True, padx=(6 * s, 0), ipady=3)
             text_block(three, f"{label}: {hint}", 9, MUTED, bg=SURFACE).pack(anchor="w")
         self.photo_button = IconButton(three, "camera", "Add photo", self.add_photo, colour=SEE,
                                        size=22, filled=False, layout="row", scale=s, bg=SURFACE,
@@ -486,7 +493,7 @@ class TeachScreen(Screen):
         size = 34 * s
         c = tk.Canvas(head, width=size, height=size, bg=SURFACE, highlightthickness=0)
         c.create_oval(1, 1, size - 1, size - 1, fill=TEACH, outline="")
-        c.create_text(size / 2, size / 2, text=number, fill="white", font=font(14, "bold"))
+        c.create_text(size / 2, size / 2, text=number, fill=ON_ACCENT, font=font(14, "bold"))
         c.pack(side="left")
         c2 = tk.Canvas(head, width=size, height=size, bg=SURFACE, highlightthickness=0)
         icons.draw(c2, icon, size / 2, size / 2, size * 0.8, TEACH)
@@ -609,7 +616,7 @@ class TeachScreen(Screen):
         e = result.entry
         colour = STATUS[e.status.value][0]
         box = tk.Frame(self.outcome, bg=SURFACE, highlightbackground=colour,
-                       highlightthickness=max(2, int(3 * s)), padx=int(14 * s), pady=int(10 * s))
+                       highlightthickness=max(1, int(2 * s)), padx=int(14 * s), pady=int(10 * s))
         box.pack(fill="x")
         size = 40 * s
         c = tk.Canvas(box, width=size, height=size, bg=SURFACE, highlightthickness=0)
@@ -637,10 +644,10 @@ class TeachScreen(Screen):
         files = self.app.demo_files
         if not files:
             return
-        self.meaning.set("house")
-        self.speaker.set("DEMO-S02")
-        from rohingya_translate.demo import CONSENT
+        from rohingya_translate.demo import CONSENT, NEW_SPEAKER
 
+        self.meaning.set("house")
+        self.speaker.set(NEW_SPEAKER)
         self.consent.set(CONSENT)
         self.set_audio(load_wav(files.word.with_name("word_house.wav")))
 
@@ -661,7 +668,7 @@ class SeeScreen(Screen):
         left = tk.Frame(body, bg=BG)
         left.pack(side="left", fill="y")
         self.view_w, self.view_h = int(440 * s), int(330 * s)
-        self.view = tk.Canvas(left, width=self.view_w, height=self.view_h, bg="#111827",
+        self.view = tk.Canvas(left, width=self.view_w, height=self.view_h, bg=CAMERA_BG,
                               highlightthickness=0, cursor="hand2")
         self.view.pack()
         self.view.bind("<Button-1>", lambda _: self.camera is None and self.start_camera())
@@ -690,9 +697,9 @@ class SeeScreen(Screen):
     def _idle_view(self) -> None:
         self.view.delete("all")
         icons.draw(self.view, "camera", self.view_w / 2, self.view_h / 2 - 16 * self.s,
-                   90 * self.s, "#374151", )
+                   90 * self.s, LINE)
         self.view.create_text(self.view_w / 2, self.view_h / 2 + 60 * self.s,
-                              text="Tap to start the camera", fill="#9CA3AF", font=font(12))
+                              text="Tap to start the camera", fill=MUTED, font=font(12))
 
     def start_camera(self) -> None:
         try:

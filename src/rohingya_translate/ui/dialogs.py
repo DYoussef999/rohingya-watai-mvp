@@ -8,7 +8,7 @@ from rohingya_translate.audio import Audio
 from rohingya_translate.recorder import Recorder
 from rohingya_translate.ui import icons
 from rohingya_translate.ui.theme import BG, GOOD, INK, MUTED, SEE, WARN, font
-from rohingya_translate.ui.widgets import IconButton, MicButton
+from rohingya_translate.ui.widgets import IconButton, MicButton, dark_title_bar
 
 KINDS = {"error": ("warning", WARN), "done": ("check", GOOD), "info": ("picture", SEE)}
 
@@ -19,6 +19,7 @@ def _dialog(root: tk.Tk, title: str) -> tk.Toplevel:
     win.transient(root)
     win.resizable(False, False)
     win.grab_set()
+    dark_title_bar(win)
     return win
 
 
@@ -56,7 +57,7 @@ def take_photo(root: tk.Tk, scale: float = 1.0, colour: str = SEE):
         return None
 
     win = _dialog(root, "Webcam")
-    view = tk.Label(win, bg="black", width=int(40 * scale), height=int(12 * scale))
+    view = tk.Label(win, bg="#08090C", width=int(40 * scale), height=int(12 * scale))
     view.pack()
     row = tk.Frame(win, bg=BG, pady=14)
     row.pack()
