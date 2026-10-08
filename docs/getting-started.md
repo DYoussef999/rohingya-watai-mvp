@@ -208,7 +208,7 @@ The app can use **Whisper**, a free, open speech model. It runs on your own comp
 
 The first run downloads the model (a few hundred megabytes), so it takes a while. Later runs start quickly and work offline.
 
-**Shortcut:** `configs\models.toml` already has all the real models switched on: Whisper, plus the dictionary models described below. To use it, install everything with `python -m pip install -e ".[whisper,lexicon]"` (about 1 GB to download). Then choose that file with the app's **gear** button (top right), or add `--config configs\models.toml` on the command line. The models themselves download on first use, about 3 GB in total.
+**Shortcut:** `configs\models.toml` already has all the real models switched on: Whisper, plus the dictionary models described below. To use it, install everything with `python -m pip install -e ".[whisper,lexicon]"` (about 1 GB to download). Then choose that file in the app's **Settings**, or add `--config configs\models.toml` on the command line. The models themselves download on first use, about 3 GB in total.
 
 ---
 
@@ -216,29 +216,29 @@ The first run downloads the model (a few hundred megabytes), so it takes a while
 
 Open the app by double-clicking `run.bat`, or by typing `rtranslate-gui` in a terminal with the venv active.
 
-The app is designed to work for people who don't read English. Every section has its own colour and a big picture-button along the top, actions are icons, and every word can be played aloud. The short English captions are mainly for the helper or caseworker.
+The app is meant to be simple for people who don't read English. There's a menu down the left with four sections, each with its own colour and picture. Every screen has **one big button** for its main job; anything else is a small text link underneath.
 
-- **Speak (green, microphone):** tap the big microphone, speak Rohingya, tap again to stop. The English appears on the right in large text and is read aloud by a built-in Windows voice; tap the green **English** button to hear it again. Five dots show how sure the translator is: green means sure, orange means "check with an interpreter". The small **Recording** button plays the original Rohingya recording back. (To change or turn off the voice, edit `[synthesizer]` and `read_aloud` in the settings file.) If the recording is a single word in the dictionary, its picture card appears underneath. **Open recording** translates a WAV file instead.
-- **Words (purple, book):** every word in the dictionary as a picture card. The card's colour shows how far it's trusted:
-  - **green, verified:** enough different speakers agree (3 by default; a matching photo can count as one of them)
-  - **blue, likely:** two sources agree
-  - **grey, new:** one person has said it
-  - **orange, unclear:** speakers said the same-sounding word means different things
+- **Speak (blue microphone):** tap the big microphone, speak Rohingya, and tap again to stop. The English appears in large text and is read aloud by a built-in Windows voice. Tap the blue speaker button to hear it again. A green **SURE** or orange **NOT SURE** label shows how confident the translation is; when it's orange, check with an interpreter. **Replay recording** plays the original Rohingya again, and **or open a recording** translates a WAV file instead. If the recording is a word that's in the dictionary, its picture card appears underneath.
+- **Words (purple book):** the dictionary. Switch between **Cards** (pictures) and **Table** (a list you can sort by tapping a column heading) at the top right. Type in the search box, or tap the microphone next to it and say a word to find it. The coloured buttons filter by status:
+  - **Verified** (green): enough different speakers agree (3 by default; a matching photo can count as one of them)
+  - **Likely** (blue): two sources agree
+  - **New** (grey): one person has said it
+  - **Unclear** (orange): speakers said the same-sounding word means different things
 
-  The little people under each card fill up as speakers agree. An orange person is someone who gave a different meaning. Tap the speaker button to hear the word, or tap the card to hear every speaker's recording and check the word against a photo. **Which word?** lets you say a word and finds its card. **Export** saves the verified words as training data.
-- **Teach (orange, speech bubble):** three steps, left to right.
-  1. Tap the picture of the thing, or type the English word.
-  2. Tap the microphone and say the Rohingya word. The bars show it was recorded; **Listen** plays it back.
-  3. Fill in the **speaker ID** (a code like `S014`, never a real name) and the **consent ID** (pointing to the speaker's signed consent; see `data/README.md`). Both stay filled in for the next word. Optionally add a photo, then tap the big green **Save**.
+  Tap a card, or double-click a row in the table, to open the word. There you can hear every speaker's recording and check the word against a photo.
+- **Teach (green speech bubble):** a short three-step lesson, with a progress bar at the top and a big green **CONTINUE** button at the bottom.
+  1. **What is it?** Tap the picture of the thing, or type the English word.
+  2. **Say it in Rohingya.** Tap the microphone and say the word. The bars show it was recorded; **LISTEN** plays it back.
+  3. **Who is speaking?** Fill in the **speaker ID** (a code like `S014`, never a real name) and the **consent ID** (pointing to the speaker's signed consent; see `data/README.md`). Optionally add a photo, then tap **SAVE**.
 
-  Pictures for step 1 come from the `data/prompts/` folder. Name each picture after what it shows, for example `cooking_pot.jpg`.
-- **See (blue, camera):** tap the dark area to start the camera, then **Take picture** (or **Open photo**). The app lists English words for what it sees. Tap a word's orange teach button to go straight to Teach with that word filled in.
+  A green banner shows what was saved and how far it's trusted now. **TEACH ANOTHER** starts the next word and keeps the speaker filled in. Pictures for step 1 come from the `data/prompts/` folder, named after what they show (for example `cooking_pot.jpg`).
+- **See (orange camera):** tap **TAKE PICTURE** (the first tap starts the camera, the second takes the photo), or **or open a photo**. The app lists English words for what it sees; tap **TEACH** next to a word to go straight to the lesson for it.
 
-The **gear** button (top right) chooses the settings file. Use `default.toml` for quick stand-ins, `models.toml` for the real models, or `demo.toml` for the demo data.
+**Settings** (bottom of the menu) chooses the settings file: `default.toml` for quick stand-ins, `models.toml` for the real models, or `demo.toml` for the demo data. It's also where you **export verified words** as training data.
 
 Everything stays on your computer. Recordings you teach are saved in `data/lexicon/`. Speak recordings and photos are never saved; for photos, only the image model's verdict is kept.
 
-With the default settings, the dictionary works with placeholder models. It only recognises recordings that are exact copies of each other, and photo checks never agree. To get real matching, switch to `configs\models.toml` (see the shortcut above).
+With the default settings, the dictionary works with placeholder models. It only recognises recordings that are exact copies of each other, and photo checks never agree. To get real matching, choose `configs\models.toml` in Settings (see the shortcut above).
 
 ---
 
@@ -274,6 +274,6 @@ rlexicon list
 | The app says a model "needs: pip install ..." | You chose `models.toml` without installing the models. Run the install command from the shortcut in Step 8. |
 | The webcam doesn't work | Close other apps using the camera. In Windows Settings → Privacy & security → Camera, allow desktop apps to use it. |
 | The microphone doesn't record | Check it's plugged in, and in Windows Settings → Privacy & security → Microphone, allow desktop apps to use it. |
-| The webcam works but nothing is recognised (all scores 0.00) | You're on the default settings, which use a placeholder image model. Tap the gear button and choose `configs\models.toml` (see the shortcut in Step 8). |
+| The webcam works but nothing is recognised (all scores 0.00) | You're on the default settings, which use a placeholder image model. Open Settings and choose `configs\models.toml` (see the shortcut in Step 8). |
 | The first photo check takes a long time | The first time, the image model downloads (about 800 MB), then prepares its word list (about 15 seconds). After that, each photo takes about a second. |
 | Something is badly broken | Delete the `.venv` folder and start again from Step 3, or double-click `run.bat` to set it up again. This doesn't affect your recordings or the project files. |

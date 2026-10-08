@@ -47,7 +47,7 @@ py -3.11 -m venv .venv
 .venv\Scripts\rtranslate recording.wav --config configs\models.toml --json
 ```
 
-`configs/default.toml` uses stub backends (instant, no downloads). `configs/models.toml` switches on the real models; install `.[whisper,lexicon]` first. In the app, choose the settings file with the gear button (top right).
+`configs/default.toml` uses stub backends (instant, no downloads). `configs/models.toml` switches on the real models; install `.[whisper,lexicon]` first. In the app, choose the settings file under Settings.
 
 ### Self-growing dictionary
 
