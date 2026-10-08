@@ -89,9 +89,10 @@ class App:
     def __init__(self, root, config_path: str, scale: float, demo: bool) -> None:
         import tkinter as tk
 
-        from rohingya_translate.ui import screens
+        from rohingya_translate.ui import icons, screens
         from rohingya_translate.ui.theme import (
             BG,
+            GREEN,
             LINE,
             MUTED,
             ON_ACCENT,
@@ -99,9 +100,10 @@ class App:
             SPEAK,
             TEACH,
             WORDS,
+            YELLOW,
             font,
         )
-        from rohingya_translate.ui.widgets import IconButton, dark_title_bar
+        from rohingya_translate.ui.widgets import NavItem, dark_title_bar
 
         self.root, self.s, self.demo = root, scale, demo
         self.config_path = config_path
@@ -113,30 +115,42 @@ class App:
         root.configure(bg=BG)
         dark_title_bar(root)
 
-        header = tk.Frame(root, bg=BG, padx=int(20 * scale), pady=int(12 * scale))
-        header.pack(fill="x")
-        self.nav: dict[str, IconButton] = {}
+        # Sidebar: name at the top, four big sections, settings at the bottom.
+        side_w = int(240 * scale)
+        sidebar = tk.Frame(root, bg=BG, width=side_w, padx=int(14 * scale), pady=int(20 * scale))
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
+        tk.Frame(root, bg=LINE, width=2).pack(side="left", fill="y")
+        brand = tk.Frame(sidebar, bg=BG)
+        brand.pack(anchor="w", padx=int(10 * scale), pady=(0, int(22 * scale)))
+        logo = tk.Canvas(brand, width=40 * scale, height=40 * scale, bg=BG, highlightthickness=0)
+        icons.draw(logo, "teach", 20 * scale, 20 * scale, 36 * scale, GREEN)
+        logo.pack(side="left")
+        tk.Label(brand, text="rohingya\ntranslate", font=font(14, "heavy"), fg=GREEN, bg=BG,
+                 justify="left").pack(side="left", padx=(8 * scale, 0))
+        self.nav: dict[str, NavItem] = {}
         for name, icon, caption, colour in [("speak", "mic", "Speak", SPEAK),
                                             ("words", "book", "Words", WORDS),
                                             ("teach", "teach", "Teach", TEACH),
                                             ("see", "camera", "See", SEE)]:
-            button = IconButton(header, icon, caption, lambda n=name: self.show(n),
-                                colour=colour, size=40, filled=False, scale=scale,
-                                font_size=13)
-            button.pack(side="left", padx=(0, 12 * scale))
-            self.nav[name] = button
-        IconButton(header, "gear", "", self.settings, colour=MUTED, size=26, filled=False,
-                   scale=scale).pack(side="right")
+            item = NavItem(sidebar, icon, caption, colour, lambda n=name: self.show(n),
+                           side_w - int(28 * scale), scale)
+            item.pack(pady=int(3 * scale))
+            self.nav[name] = item
+        NavItem(sidebar, "gear", "Settings", MUTED, self.settings, side_w - int(28 * scale),
+                scale).pack(side="bottom")
         if demo:
-            tk.Label(header, text=" DEMO DATA ", font=font(11, "bold"), fg=ON_ACCENT, bg=TEACH,
-                     padx=6, pady=4).pack(side="right", padx=12 * scale)
+            tk.Label(sidebar, text="DEMO DATA", font=font(10, "heavy"), fg=ON_ACCENT, bg=YELLOW,
+                     padx=8, pady=3).pack(side="bottom", anchor="w", padx=int(12 * scale),
+                                          pady=int(10 * scale))
 
-        tk.Frame(root, bg=LINE, height=1).pack(fill="x")
-        self.body = tk.Frame(root, bg=BG)
-        self.body.pack(fill="both", expand=True)
-        self.status = tk.Label(root, text="", font=font(10), fg=MUTED, bg=BG, anchor="w",
-                               padx=int(20 * scale), pady=int(4 * scale))
+        main = tk.Frame(root, bg=BG)
+        main.pack(side="left", fill="both", expand=True)
+        self.status = tk.Label(main, text="", font=font(10), fg=MUTED, bg=BG, anchor="w",
+                               padx=int(36 * scale), pady=int(6 * scale))
         self.status.pack(fill="x", side="bottom")
+        self.body = tk.Frame(main, bg=BG)
+        self.body.pack(fill="both", expand=True)
 
         self.speak = screens.SpeakScreen(self)
         self.words = screens.WordsScreen(self)
@@ -234,15 +248,15 @@ class App:
         """A small card for a dictionary word: picture, word and status."""
         import tkinter as tk
 
-        from rohingya_translate.ui.theme import INK, STATUS, SURFACE, font
+        from rohingya_translate.ui.theme import BG, INK, LINE, WORDS, font
         from rohingya_translate.ui.widgets import StatusBadge, picture_or_icon
 
-        colour = STATUS[entry.status.value][0]
-        chip = tk.Frame(master, bg=SURFACE, highlightbackground=colour,
-                        highlightthickness=max(2, int(2 * self.s)), padx=8, pady=8)
-        picture_or_icon(chip, self.picture_for(entry.meaning), int(64 * self.s), colour).pack()
-        tk.Label(chip, text=entry.meaning, font=font(12, "bold"), fg=INK, bg=SURFACE).pack()
-        StatusBadge(chip, entry.status.value, self.s, bg=SURFACE).pack(pady=(2, 0))
+        chip = tk.Frame(master, bg=BG, highlightbackground=LINE, highlightthickness=2,
+                        padx=10, pady=10)
+        picture_or_icon(chip, self.picture_for(entry.meaning), int(64 * self.s), WORDS,
+                        bg=BG).pack()
+        tk.Label(chip, text=entry.meaning, font=font(12, "heavy"), fg=INK, bg=BG).pack()
+        StatusBadge(chip, entry.status.value, self.s, bg=BG).pack(pady=(2, 0))
         return chip
 
     def word_details(self, entry, clips) -> None:
@@ -250,7 +264,7 @@ class App:
         import tkinter as tk
 
         from rohingya_translate.ui import dialogs
-        from rohingya_translate.ui.theme import BG, INK, MUTED, SEE, STATUS, font
+        from rohingya_translate.ui.theme import BG, BLUE, INK, MUTED, SEE, STATUS, WORDS, font
         from rohingya_translate.ui.widgets import (
             AgreementMeter,
             IconButton,
@@ -266,8 +280,8 @@ class App:
         win.title(entry.meaning)
         win.transient(self.root)
         dark_title_bar(win)
-        picture_or_icon(win, self.picture_for(entry.meaning), int(220 * s), colour, bg=BG).pack()
-        tk.Label(win, text=entry.meaning, font=font(24, "bold"), fg=INK, bg=BG).pack(
+        picture_or_icon(win, self.picture_for(entry.meaning), int(200 * s), WORDS, bg=BG).pack()
+        tk.Label(win, text=entry.meaning, font=font(26, "heavy"), fg=INK, bg=BG).pack(
             pady=(10 * s, 4 * s))
         StatusBadge(win, entry.status.value, s, bg=BG).pack()
         sp = entry.support
@@ -282,7 +296,7 @@ class App:
         row.pack(pady=(14 * s, 0))
         for clip in clips:
             IconButton(row, "speaker", clip.speaker_id, lambda c=clip: self.play_clip(c),
-                       colour=colour, size=22, filled=False, layout="row", scale=s,
+                       colour=BLUE, size=18, layout="row", scale=s,
                        font_size=9).pack(side="left", padx=3)
 
         result = text_block(win, "", 11, MUTED)
@@ -320,22 +334,23 @@ class App:
         checks = tk.Frame(win, bg=BG)
         checks.pack(pady=(16 * s, 6 * s))
         IconButton(checks, "camera", "Check with camera", lambda: check(True), colour=SEE,
-                   size=22, layout="row", scale=s, font_size=10).pack(side="left", padx=4)
-        IconButton(checks, "folder", "Check with photo", lambda: check(False), colour=SEE,
-                   size=22, filled=False, layout="row", scale=s, font_size=10).pack(
+                   size=20, layout="row", scale=s, font_size=10, upper=True).pack(
             side="left", padx=4)
+        IconButton(checks, "folder", "Check with photo", lambda: check(False), colour=SEE,
+                   size=20, filled=False, layout="row", scale=s, font_size=10,
+                   upper=True).pack(side="left", padx=4)
         result.pack()
 
     def teach_word(self, meaning: str) -> None:
         self.show("teach")
-        self.teach.meaning.set(meaning)
+        self.teach.start(meaning)
 
     def settings(self) -> None:
         """Choose the settings file (stub models, real models, or demo)."""
         import tkinter as tk
         from tkinter import filedialog
 
-        from rohingya_translate.ui.theme import BG, GOOD, INK, MUTED, font
+        from rohingya_translate.ui.theme import BG, GOOD, INK, LINE, MUTED, WORDS, font
         from rohingya_translate.ui.widgets import IconButton, dark_title_bar, entry, text_block
 
         s = self.s
@@ -344,7 +359,9 @@ class App:
         dark_title_bar(win)
         win.transient(self.root)
         win.grab_set()
-        tk.Label(win, text="Settings file", font=font(14, "bold"), fg=INK, bg=BG).pack(anchor="w")
+        tk.Label(win, text="Settings", font=font(20, "heavy"), fg=INK, bg=BG).pack(anchor="w")
+        tk.Label(win, text="SETTINGS FILE", font=font(10, "heavy"), fg=MUTED, bg=BG).pack(
+            anchor="w", pady=(12, 0))
         text_block(win, "default.toml: quick stand-ins.  models.toml: real models.  "
                         "demo.toml: made-up demo data.", 10, MUTED).pack(anchor="w", pady=(2, 8))
         path = tk.StringVar(value=self.config_path)
@@ -376,8 +393,30 @@ class App:
             self.teach.load_pictures()
             self.words.refresh()
 
-        IconButton(win, "check", "Use these settings", apply, colour=GOOD, size=24,
-                   layout="row", scale=s).pack(pady=(16, 0))
+        IconButton(win, "", "Use these settings", apply, colour=GOOD, size=20, layout="row",
+                   scale=s, upper=True, font_size=12).pack(anchor="w", pady=(14, 0))
+
+        tk.Frame(win, bg=LINE, height=2).pack(fill="x", pady=(22, 16))
+        tk.Label(win, text="TRAINING DATA", font=font(10, "heavy"), fg=MUTED, bg=BG).pack(
+            anchor="w")
+        text_block(win, "Save every verified word and its recordings as a list for training "
+                        "the translator.", 10, MUTED).pack(anchor="w", pady=(2, 8))
+
+        def export() -> None:
+            out = filedialog.asksaveasfilename(parent=win, defaultextension=".csv",
+                                               filetypes=[("CSV", "*.csv")],
+                                               initialfile="lexicon_verified.csv")
+            if not out:
+                return
+
+            def done(n: int) -> None:
+                self.alert("done", f"Saved {n} verified recordings to\n{out}")
+
+            self.run("Exporting", lambda: self.engine().lexicon().export_csv(out), done)
+
+        IconButton(win, "save", "Export verified words", export, colour=WORDS, size=18,
+                   filled=False, layout="row", scale=s, upper=True, font_size=11).pack(
+            anchor="w")
 
     def _start_demo(self) -> None:
         from rohingya_translate.demo import build_demo
@@ -386,8 +425,8 @@ class App:
             self.demo_files, self._prompts = files, None
             self.speak.show_demo()
             self.see.show_demo()
-            self.teach.load_pictures()
             self.teach.prefill_demo()
+            self.teach.load_pictures()
             self.words.refresh()
 
         self.run("Creating demo data",
@@ -416,8 +455,8 @@ def main(argv: list[str] | None = None) -> None:
     root = tk.Tk()
     root.title("Rohingya Translate (demo data)" if args.demo else "Rohingya Translate")
     scale = root.winfo_fpixels("1i") / 96  # sizes in the UI are for a 100% scaled screen
-    root.geometry(f"{int(1080 * scale)}x{int(720 * scale)}")
-    root.minsize(int(900 * scale), int(620 * scale))
+    root.geometry(f"{int(1180 * scale)}x{int(760 * scale)}")
+    root.minsize(int(1000 * scale), int(660 * scale))
     App(root, config_path, scale, args.demo)
     root.mainloop()
 

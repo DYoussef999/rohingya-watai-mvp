@@ -1,4 +1,4 @@
-"""Visual building blocks: icon buttons, the microphone button, status badges and meters."""
+"""Visual building blocks: chunky buttons, the microphone, navigation, badges and meters."""
 
 from __future__ import annotations
 
@@ -12,8 +12,7 @@ import numpy as np
 from rohingya_translate.ui import icons
 from rohingya_translate.ui.theme import (
     BG,
-    FAINT,
-    GOOD,
+    BLUE,
     INK,
     LINE,
     MUTED,
@@ -23,41 +22,50 @@ from rohingya_translate.ui.theme import (
     RECORD,
     STATUS,
     SURFACE,
-    TEACH,
     WARN,
     font,
+    lip,
     shade,
 )
 
 
 class IconButton(tk.Canvas):
-    """A rounded button with a big icon and an optional short caption.
+    """A chunky rounded button with a darker edge underneath that "presses down" when clicked.
 
-    ``layout="column"`` puts the caption under the icon (tiles); ``"row"`` beside it (pills).
+    ``filled`` buttons are the main action (colour fill, dark label). Others are outlined.
+    ``layout="column"`` puts the label under the icon; ``"row"`` beside it. ``icon`` may be
+    empty for a text-only button. ``upper`` writes the label in capitals, Duolingo style.
     """
 
     def __init__(self, master, icon: str, text: str = "", command: Callable | None = None,
-                 colour: str = INK, size: int = 40, filled: bool = True, layout: str = "column",
-                 scale: float = 1.0, bg: str | None = None, font_size: int = 12) -> None:
-        self.icon, self.text, self.command, self.colour = icon, text, command, colour
+                 colour: str = BLUE, size: int = 40, filled: bool = True, layout: str = "column",
+                 scale: float = 1.0, bg: str | None = None, font_size: int = 12,
+                 upper: bool = False, min_width: int = 0) -> None:
+        self.icon, self.command, self.colour = icon, command, colour
+        self.text = text.upper() if upper else text
         self.filled, self.layout, self.s = filled, layout, scale
-        self.icon_px = size * scale
-        self.font = tkfont.Font(family=font(1)[0], size=font_size, weight="bold")
+        self.icon_px = size * scale if icon else 0
+        self.lip = 4 * scale
+        self.font = tkfont.Font(family=font(1, "heavy" if upper else "bold")[0],
+                                size=font_size)
         pad = 14 * scale
-        text_w = self.font.measure(text) if text else 0
-        text_h = self.font.metrics("linespace") if text else 0
+        text_w = self.font.measure(self.text) if self.text else 0
+        text_h = self.font.metrics("linespace") if self.text else 0
         if layout == "column":
             width = max(self.icon_px + 2 * pad, text_w + 2 * pad)
-            height = self.icon_px + pad * 2 + (text_h + 4 * scale if text else 0)
+            height = self.icon_px + pad * 2 + (text_h + 4 * scale if self.text else 0)
         else:
-            width = self.icon_px + 2 * pad + (text_w + pad * 0.8 if text else 0)
-            height = self.icon_px + pad * 1.4
-        super().__init__(master, width=width, height=height, highlightthickness=0,
+            gap = pad * 0.7 if icon and self.text else 0
+            width = self.icon_px + gap + text_w + 2 * pad * (1.3 if upper else 1)
+            height = max(self.icon_px, text_h) + pad * 1.5
+        width = max(width, min_width * scale)
+        super().__init__(master, width=width, height=height + self.lip, highlightthickness=0,
                          bg=bg or master.cget("bg"), cursor="hand2")
         self.w, self.h = width, height
-        self.enabled, self.selected, self._hover = True, False, False
-        self.bind("<Enter>", lambda _: self._set_hover(True))
-        self.bind("<Leave>", lambda _: self._set_hover(False))
+        self.enabled, self.selected, self._hover, self._down = True, False, False, False
+        self.bind("<Enter>", lambda _: self._set(hover=True))
+        self.bind("<Leave>", lambda _: self._set(hover=False, down=False))
+        self.bind("<ButtonPress-1>", lambda _: self._set(down=True))
         self.bind("<ButtonRelease-1>", self._click)
         self._draw()
 
@@ -77,51 +85,160 @@ class IconButton(tk.Canvas):
         self.selected = selected
         self._draw()
 
-    def _set_hover(self, hover: bool) -> None:
-        self._hover = hover
+    def _set(self, hover: bool | None = None, down: bool | None = None) -> None:
+        self._hover = self._hover if hover is None else hover
+        self._down = self._down if down is None else down
         self._draw()
 
     def _click(self, event) -> None:
-        inside = 0 <= event.x <= self.w and 0 <= event.y <= self.h
+        self._set(down=False)
+        inside = 0 <= event.x <= self.w and 0 <= event.y <= self.h + self.lip
         if inside and self.enabled and self.command:
             self.command()
 
     def _draw(self) -> None:
         self.delete("all")
-        colour = self.colour if self.enabled else NEUTRAL
-        if self.filled or self.selected:
-            fill = shade(colour, 0.85) if self._hover and self.enabled else colour
-            ink, outline = ON_ACCENT, ""
+        r = 14 * self.s
+        if not self.enabled:
+            face, edge, ink, border = RAISED, RAISED, MUTED, ""
+        elif self.filled or self.selected:
+            face = shade(self.colour, 0.9) if self._hover else self.colour
+            edge, ink, border = lip(self.colour), ON_ACCENT, ""
         else:
-            fill = shade(colour, 1.82) if self._hover and self.enabled else SURFACE
-            ink, outline = colour, shade(colour, 1.6)
-        icons.round_rect(self, 1, 1, self.w - 1, self.h - 1, 16 * self.s, fill=fill,
-                         outline=outline, width=max(1, int(2 * self.s)))
+            face = RAISED if self._hover else self.cget("bg")
+            edge, ink, border = LINE, self.colour, LINE
+        down = self.lip if self._down and self.enabled else 0
+        if self.enabled:  # the edge underneath; disappears while pressed
+            icons.round_rect(self, 1, self.lip, self.w - 1, self.h + self.lip - 1, r,
+                             fill=edge, outline="")
+        icons.round_rect(self, 1, 1 + down, self.w - 1, self.h - 1 + down, r, fill=face,
+                         outline=border, width=max(1, int(2 * self.s)))
         pad = 14 * self.s
         if self.layout == "column":
-            cy = pad + self.icon_px / 2
-            icons.draw(self, self.icon, self.w / 2, cy, self.icon_px, ink, knockout=fill)
+            cy = pad + self.icon_px / 2 + down
+            if self.icon:
+                icons.draw(self, self.icon, self.w / 2, cy, self.icon_px, ink, knockout=face)
             if self.text:
-                self.create_text(self.w / 2, self.h - pad * 0.9, text=self.text, fill=ink,
+                self.create_text(self.w / 2, self.h - pad * 0.9 + down, text=self.text, fill=ink,
                                  font=self.font, anchor="s")
         else:
-            cx = pad + self.icon_px / 2
-            icons.draw(self, self.icon, cx, self.h / 2, self.icon_px, ink, knockout=fill)
+            gap = pad * 0.7 if self.icon and self.text else 0
+            content = self.icon_px + gap + (self.font.measure(self.text) if self.text else 0)
+            x = (self.w - content) / 2
+            if self.icon:
+                icons.draw(self, self.icon, x + self.icon_px / 2, self.h / 2 + down,
+                           self.icon_px, ink, knockout=face)
             if self.text:
-                self.create_text(cx + self.icon_px / 2 + pad * 0.6, self.h / 2, text=self.text,
+                self.create_text(x + self.icon_px + gap, self.h / 2 + down, text=self.text,
                                  fill=ink, font=self.font, anchor="w")
 
 
+def link(master, text: str, command: Callable, colour: str = BLUE, size: int = 11,
+         bg: str | None = None) -> tk.Label:
+    """A quiet text button for secondary actions."""
+    label = tk.Label(master, text=text.upper(), font=font(size, "heavy"), fg=colour,
+                     bg=bg or master.cget("bg"), cursor="hand2")
+    label.bind("<Button-1>", lambda _: command())
+    label.bind("<Enter>", lambda _: label.configure(fg=shade(colour, 0.75)))
+    label.bind("<Leave>", lambda _: label.configure(fg=colour))
+    return label
+
+
+class NavItem(tk.Canvas):
+    """One entry in the sidebar: coloured icon and a word. The current one is highlighted."""
+
+    def __init__(self, master, icon: str, text: str, colour: str, command: Callable,
+                 width: int, scale: float = 1.0) -> None:
+        self.h = 56 * scale
+        super().__init__(master, width=width, height=self.h, highlightthickness=0,
+                         bg=master.cget("bg"), cursor="hand2")
+        self.icon, self.text, self.colour, self.s, self.w = icon, text, colour, scale, width
+        self.selected, self._hover = False, False
+        self.bind("<Enter>", lambda _: self._set_hover(True))
+        self.bind("<Leave>", lambda _: self._set_hover(False))
+        self.bind("<ButtonRelease-1>", lambda _: command())
+        self._draw()
+
+    def set_selected(self, selected: bool) -> None:
+        self.selected = selected
+        self._draw()
+
+    def _set_hover(self, hover: bool) -> None:
+        self._hover = hover
+        self._draw()
+
+    def _draw(self) -> None:
+        self.delete("all")
+        s = self.s
+        if self.selected:
+            icons.round_rect(self, 2, 2, self.w - 2, self.h - 2, 14 * s,
+                             fill=shade(BLUE, 1.82), outline=BLUE, width=max(1, int(2 * s)))
+        elif self._hover:
+            icons.round_rect(self, 2, 2, self.w - 2, self.h - 2, 14 * s, fill=RAISED, outline="")
+        icons.draw(self, self.icon, 30 * s, self.h / 2, 30 * s, self.colour)
+        self.create_text(58 * s, self.h / 2, text=self.text.upper(), anchor="w",
+                         font=font(13, "heavy"), fill=BLUE if self.selected else INK)
+
+
+class Segmented(tk.Frame):
+    """A two-or-more way switch, e.g. Cards | Table."""
+
+    def __init__(self, master, options: list[tuple[str, str, str]], command: Callable[[str], None],
+                 scale: float = 1.0) -> None:
+        super().__init__(master, bg=master.cget("bg"))
+        self.buttons: dict[str, IconButton] = {}
+        for key, icon, text in options:
+            b = IconButton(self, icon, text, lambda k=key: (self.select(k), command(k)),
+                           colour=BLUE, size=18, filled=False, layout="row", scale=scale,
+                           font_size=10, upper=True)
+            b.pack(side="left", padx=(0, 6 * scale))
+            self.buttons[key] = b
+
+    def select(self, key: str) -> None:
+        for k, b in self.buttons.items():
+            b.set_selected(k == key)
+
+
+class ProgressBar(tk.Canvas):
+    """A rounded lesson progress bar."""
+
+    def __init__(self, master, width: int, colour: str, scale: float = 1.0,
+                 height: int = 16) -> None:
+        self.h = height * scale
+        super().__init__(master, width=width, height=self.h, highlightthickness=0,
+                         bg=master.cget("bg"))
+        self.colour, self.w = colour, width
+        self.bind("<Configure>", lambda e: self._resize(e.width))
+        self.value = 0.0
+        self.set(0.0)
+
+    def _resize(self, width: int) -> None:
+        self.w = width
+        self.set(self.value)
+
+    def set(self, value: float) -> None:
+        self.value = value
+        self.delete("all")
+        icons.round_rect(self, 0, 0, self.w, self.h, self.h / 2, fill=RAISED, outline="")
+        if value > 0:
+            end = max(self.h, self.w * min(1.0, value))
+            icons.round_rect(self, 0, 0, end, self.h, self.h / 2, fill=self.colour, outline="")
+            icons.round_rect(self, self.h * 0.5, self.h * 0.22, end - self.h * 0.5,
+                             self.h * 0.45, self.h * 0.12, fill=shade(self.colour, 0.75),
+                             outline="")  # the little highlight Duolingo bars have
+
+
 class MicButton(tk.Canvas):
-    """The big press-to-talk button. Shows a ring that grows with your voice, and a timer."""
+    """The big press-to-talk button, with a chunky edge. Shows a ring that grows with your voice."""
 
     def __init__(self, master, colour: str, command: Callable, diameter: int = 150,
                  scale: float = 1.0) -> None:
         self.d = diameter * scale
-        self.margin = 28 * scale
+        self.margin = 24 * scale
+        self.lip = 7 * scale
         size = self.d + 2 * self.margin
-        super().__init__(master, width=size, height=size + 34 * scale, highlightthickness=0,
-                         bg=master.cget("bg"), cursor="hand2")
+        super().__init__(master, width=size, height=size + self.lip + 30 * scale,
+                         highlightthickness=0, bg=master.cget("bg"), cursor="hand2")
         self.colour, self.command, self.s = colour, command, scale
         self.state, self.level, self.seconds = "idle", 0.0, 0.0
         self.bind("<ButtonRelease-1>", lambda _: self.state != "busy" and self.command())
@@ -141,42 +258,51 @@ class MicButton(tk.Canvas):
         self.delete("all")
         c = self.margin + self.d / 2
         r = self.d / 2
+        colour = {"recording": RECORD, "busy": RAISED}.get(self.state, self.colour)
         if self.state == "recording":
             ring = r + 4 * self.s + self.level * (self.margin - 4 * self.s)
-            self.create_oval(c - ring, c - ring, c + ring, c + ring, fill=shade(RECORD, 1.75),
+            self.create_oval(c - ring, c - ring, c + ring, c + ring, fill=shade(RECORD, 1.7),
                              outline="")
-            self.create_oval(c - r, c - r, c + r, c + r, fill=RECORD, outline="")
-            icons.draw(self, "stop", c, c, self.d * 0.36, ON_ACCENT, knockout=RECORD)
+        self.create_oval(c - r, c - r + self.lip, c + r, c + r + self.lip,
+                         fill=lip(colour) if self.state != "busy" else LINE, outline="")
+        self.create_oval(c - r, c - r, c + r, c + r, fill=colour, outline="")
+        if self.state == "recording":
+            icons.draw(self, "stop", c, c, self.d * 0.34, ON_ACCENT, knockout=colour)
             minutes, secs = divmod(int(self.seconds), 60)
-            self.create_text(c, self.d + 2 * self.margin + 12 * self.s,
-                             text=f"{minutes}:{secs:02d}", fill=RECORD, font=font(14, "bold"))
+            self.create_text(c, self.d + 2 * self.margin + self.lip + 8 * self.s,
+                             text=f"{minutes}:{secs:02d}", fill=RECORD, font=font(14, "heavy"))
         elif self.state == "busy":
-            self.create_oval(c - r, c - r, c + r, c + r, fill=FAINT, outline="")
             for i in range(3):
                 x = c + (i - 1) * r * 0.42
                 self.create_oval(x - 9 * self.s, c - 9 * self.s, x + 9 * self.s, c + 9 * self.s,
                                  fill=self.colour, outline="")
         else:
-            self.create_oval(c - r - 6 * self.s, c - r - 6 * self.s, c + r + 6 * self.s,
-                             c + r + 6 * self.s, fill=shade(self.colour, 1.8), outline="")
-            self.create_oval(c - r, c - r, c + r, c + r, fill=self.colour, outline="")
-            icons.draw(self, "mic", c, c, self.d * 0.55, ON_ACCENT, knockout=self.colour)
+            icons.draw(self, "mic", c, c, self.d * 0.52, ON_ACCENT, knockout=colour)
 
 
-class StatusBadge(tk.Canvas):
-    """Coloured pill: icon + one word. Colour and icon carry the meaning; the word helps helpers."""
+class Pill(tk.Canvas):
+    """A soft coloured pill: icon + a word or two. The colour and icon carry the meaning."""
 
-    def __init__(self, master, status: str, scale: float = 1.0, bg: str | None = None) -> None:
-        colour, icon, caption = STATUS[status]
-        f = tkfont.Font(family=font(1)[0], size=10, weight="bold")
-        h = 26 * scale
+    def __init__(self, master, icon: str, caption: str, colour: str, scale: float = 1.0,
+                 bg: str | None = None, size: int = 9) -> None:
+        f = tkfont.Font(family=font(1, "heavy")[0], size=size)
+        caption = caption.upper()
+        h = (26 + (size - 9) * 2) * scale
         w = h + f.measure(caption) + 12 * scale
         super().__init__(master, width=w, height=h, highlightthickness=0,
                          bg=bg or master.cget("bg"))
-        tint = shade(colour, 1.78)  # soft pill, bright icon and word: calmer on a dark screen
+        tint = shade(colour, 1.8)
         icons.round_rect(self, 0, 0, w, h, h / 2, fill=tint, outline="")
-        icons.draw(self, icon, h / 2 + 2 * scale, h / 2, h * 0.62, colour, knockout=tint)
+        icons.draw(self, icon, h / 2 + 2 * scale, h / 2, h * 0.6, colour, knockout=tint)
         self.create_text(h + 2 * scale, h / 2, text=caption, fill=colour, font=f, anchor="w")
+
+
+class StatusBadge(Pill):
+    """The pill for a dictionary status (verified, likely, new, unclear)."""
+
+    def __init__(self, master, status: str, scale: float = 1.0, bg: str | None = None) -> None:
+        colour, icon, caption = STATUS[status]
+        super().__init__(master, icon, caption, colour, scale, bg)
 
 
 class AgreementMeter(tk.Canvas):
@@ -187,37 +313,21 @@ class AgreementMeter(tk.Canvas):
 
     def __init__(self, master, speakers: int, needed: int, vision: bool, conflicts: int,
                  colour: str, scale: float = 1.0, bg: str | None = None) -> None:
-        icon = 22 * scale
+        icon = 24 * scale
         slots = max(needed, speakers)
         count = slots + conflicts + (1 if vision else 0)
-        super().__init__(master, width=max(1, count) * (icon + 3 * scale), height=icon + 4,
+        super().__init__(master, width=max(1, count) * (icon + 4 * scale), height=icon + 4,
                          highlightthickness=0, bg=bg or master.cget("bg"))
         x = icon / 2
         for i in range(slots):
             icons.draw(self, "person", x, icon / 2 + 2, icon, colour if i < speakers else LINE)
-            x += icon + 3 * scale
+            x += icon + 4 * scale
         if vision:
-            icons.draw(self, "camera", x, icon / 2 + 2, icon * 0.95, colour, )
-            x += icon + 3 * scale
+            icons.draw(self, "camera", x, icon / 2 + 2, icon * 0.95, colour)
+            x += icon + 4 * scale
         for _ in range(conflicts):
             icons.draw(self, "person", x, icon / 2 + 2, icon, WARN)
-            x += icon + 3 * scale
-
-
-class ConfidenceDots(tk.Canvas):
-    """Five dots: how sure the translator is. Green when sure, orange when unsure."""
-
-    def __init__(self, master, confidence: float | None, scale: float = 1.0) -> None:
-        r = 8 * scale
-        super().__init__(master, width=5 * (2 * r + 6 * scale), height=2 * r + 4,
-                         highlightthickness=0, bg=master.cget("bg"))
-        value = confidence or 0.0
-        filled = round(value * 5)
-        colour = GOOD if value >= 0.7 else TEACH if value >= 0.4 else WARN
-        for i in range(5):
-            x = r + i * (2 * r + 6 * scale)
-            self.create_oval(x - r, 2, x + r, 2 + 2 * r, outline="",
-                             fill=colour if i < filled else LINE)
+            x += icon + 4 * scale
 
 
 class Waveform(tk.Canvas):
@@ -231,13 +341,13 @@ class Waveform(tk.Canvas):
 
     def show(self, samples: np.ndarray | None) -> None:
         self.delete("all")
-        bars = 48
+        bars = 40
         step = self.w / bars
         if samples is None or len(samples) < bars:
             for i in range(bars):
                 x = i * step + step / 2
                 self.create_line(x, self.h / 2 - 2, x, self.h / 2 + 2, fill=LINE,
-                                 width=max(2, step * 0.5), capstyle="round")
+                                 width=max(3, step * 0.55), capstyle="round")
             return
         chunks = np.array_split(np.abs(samples), bars)
         peaks = np.array([c.max() if len(c) else 0 for c in chunks])
@@ -246,7 +356,7 @@ class Waveform(tk.Canvas):
             x = i * step + step / 2
             half = max(2, p * (self.h / 2 - 3))
             self.create_line(x, self.h / 2 - half, x, self.h / 2 + half, fill=self.colour,
-                             width=max(2, step * 0.5), capstyle="round")
+                             width=max(3, step * 0.55), capstyle="round")
 
 
 class ThinScrollbar(tk.Canvas):
@@ -358,18 +468,17 @@ def picture_or_icon(master, path: Path | None, size: int, colour: str,
         label.image = image
         return label
     canvas = tk.Canvas(master, width=size, height=size, bg=bg, highlightthickness=0)
-    icons.round_rect(canvas, 2, 2, size - 2, size - 2, size * 0.12, fill=shade(colour, 1.85),
-                     outline="")
-    icons.draw(canvas, "picture", size / 2, size / 2, size * 0.5, shade(colour, 1.4))
+    icons.round_rect(canvas, 2, 2, size - 2, size - 2, size * 0.12, fill=RAISED, outline="")
+    icons.draw(canvas, "picture", size / 2, size / 2, size * 0.45, NEUTRAL)
     return canvas
 
 
 def entry(master, var: tk.StringVar, size: int = 12, width: int | None = None,
-          accent: str = MUTED) -> tk.Entry:
-    """A dark text box with a thin border that lights up while typing."""
+          accent: str = BLUE) -> tk.Entry:
+    """A dark, rounded-looking text box with a border that lights up while typing."""
     extra = {"width": width} if width else {}
     return tk.Entry(master, textvariable=var, font=font(size), bg=RAISED, fg=INK,
-                    insertbackground=INK, relief="flat", highlightthickness=1,
+                    insertbackground=INK, relief="flat", highlightthickness=2,
                     highlightbackground=LINE, highlightcolor=accent,
                     selectbackground=shade(accent, 1.5), selectforeground=INK, **extra)
 

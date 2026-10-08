@@ -1,30 +1,30 @@
 """The four screens: Speak (translate), Words (dictionary), Teach (add a word) and See (photos).
 
-Visual first: every action is a big icon, every status a colour, every word playable.
-English captions are short and aimed at the helper or caseworker.
+Kept deliberately simple: one big action per screen, secondary actions as quiet
+links, and every word playable. English captions are short and aimed at helpers.
 """
 
 from __future__ import annotations
 
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog
-from typing import TYPE_CHECKING, Any
+from tkinter import filedialog, ttk
+from typing import TYPE_CHECKING
 
 from rohingya_translate.audio import Audio, load_wav
 from rohingya_translate.recorder import Recorder, play
 from rohingya_translate.ui import dialogs, icons
 from rohingya_translate.ui.theme import (
     BG,
+    BLUE,
     GOOD,
     INK,
     LINE,
     MUTED,
-    ON_ACCENT,
+    RAISED,
     SEE,
     SPEAK,
     STATUS,
-    SURFACE,
     TEACH,
     WARN,
     WORDS,
@@ -32,14 +32,18 @@ from rohingya_translate.ui.theme import (
     shade,
 )
 from rohingya_translate.ui.widgets import (
-    AgreementMeter,
-    ConfidenceDots,
     IconButton,
     MicButton,
+    Pill,
+    ProgressBar,
     ScrollFrame,
+    Segmented,
     StatusBadge,
+    ThinScrollbar,
     Waveform,
     entry,
+    link,
+    load_picture,
     picture_or_icon,
     text_block,
 )
@@ -50,21 +54,16 @@ if TYPE_CHECKING:
 AUDIO_TYPES = [("WAV recordings", "*.wav"), ("All files", "*.*")]
 IMAGE_TYPES = [("Pictures", "*.jpg *.jpeg *.png *.bmp *.webp"), ("All files", "*.*")]
 MIN_SECONDS = 0.3
-CAMERA_BG = "#08090C"
+CAMERA_BG = "#0B1418"
 
 
-def title_row(master, icon: str, title: str, colour: str, scale: float) -> tk.Frame:
-    row = tk.Frame(master, bg=BG)
-    size = 44 * scale
-    c = tk.Canvas(row, width=size, height=size, bg=BG, highlightthickness=0)
-    icons.draw(c, icon, size / 2, size / 2, size * 0.85, colour)
-    c.pack(side="left")
-    tk.Label(row, text=title, font=font(22, "bold"), fg=colour, bg=BG).pack(side="left", padx=8)
-    return row
+def heading(master, text: str, size: int = 24) -> tk.Label:
+    return tk.Label(master, text=text, font=font(size, "heavy"), fg=INK, bg=master.cget("bg"))
 
 
-def card(master, **kw) -> tk.Frame:
-    return tk.Frame(master, bg=SURFACE, highlightbackground=LINE, highlightthickness=1, **kw)
+def bordered(master, **kw) -> tk.Frame:
+    """A Duolingo-style card: background colour with a soft border."""
+    return tk.Frame(master, bg=BG, highlightbackground=LINE, highlightthickness=2, **kw)
 
 
 def clear(frame: tk.Widget) -> None:
@@ -74,7 +73,7 @@ def clear(frame: tk.Widget) -> None:
 
 class Screen(tk.Frame):
     def __init__(self, app: App) -> None:
-        super().__init__(app.body, bg=BG, padx=int(24 * app.s), pady=int(16 * app.s))
+        super().__init__(app.body, bg=BG, padx=int(36 * app.s), pady=int(28 * app.s))
         self.app, self.s = app, app.s
 
     def on_show(self) -> None: ...
@@ -82,68 +81,26 @@ class Screen(tk.Frame):
     def on_hide(self) -> None: ...
 
 
-# Speak ----------------------------------------------------------------------------------
+class Recording:
+    """Shared press-to-talk logic for a MicButton."""
 
-
-class SpeakScreen(Screen):
-    """Tap the microphone, speak Rohingya, read (or hear) the English."""
-
-    def __init__(self, app: App) -> None:
-        super().__init__(app)
-        s = self.s
-        title_row(self, "mic", "Speak", SPEAK, s).pack(anchor="w")
-        body = tk.Frame(self, bg=BG)
-        body.pack(fill="both", expand=True, pady=(12 * s, 0))
-
-        left = tk.Frame(body, bg=BG, width=int(300 * s))
-        left.pack(side="left", fill="y")
-        self.mic = MicButton(left, SPEAK, self.toggle, diameter=170, scale=s)
-        self.mic.pack(pady=(10 * s, 0))
-        self.hint = text_block(left, "Tap, speak Rohingya, tap again.", 12, MUTED,
-                               wrap=int(260 * s))
-        self.hint.pack(pady=(0, 14 * s))
-        buttons = tk.Frame(left, bg=BG)
-        buttons.pack()
-        IconButton(buttons, "folder", "Open recording", self.open_file, colour=SPEAK, size=22,
-                   filled=False, layout="row", scale=s, font_size=10).pack(pady=4)
-        self.demo_button = IconButton(buttons, "play", "Demo recording", self.demo, colour=TEACH,
-                                      size=22, filled=False, layout="row", scale=s, font_size=10)
-
-        self.result = card(body, padx=int(24 * s), pady=int(20 * s))
-        self.result.pack(side="left", fill="both", expand=True, padx=(24 * s, 0))
+    def __init__(self, screen: Screen, mic: MicButton, on_audio) -> None:
+        self.screen, self.mic, self.on_audio = screen, mic, on_audio
         self.recorder = Recorder()
-        self.last_audio: Audio | None = None
-        self.english, self.english_audio = "", None
-        self._empty()
-
-    def show_demo(self) -> None:
-        self.demo_button.pack(pady=4)
-
-    def _empty(self) -> None:
-        clear(self.result)
-        size = 90 * self.s
-        c = tk.Canvas(self.result, width=size, height=size, bg=SURFACE, highlightthickness=0)
-        icons.draw(c, "speaker", size / 2, size / 2, size * 0.8, shade(SPEAK, 1.7))
-        c.pack(pady=(40 * self.s, 10 * self.s))
-        text_block(self.result, "The English translation appears here.", 13, MUTED,
-                   bg=SURFACE).pack()
-
-    # recording
 
     def toggle(self) -> None:
         if self.recorder.recording:
             audio = self.recorder.stop()
             self.mic.set_state("idle")
             if audio.duration < MIN_SECONDS:
-                self.app.alert("error", "That was too short. Tap the microphone, speak, "
-                                        "then tap again to stop.")
+                self.screen.app.alert("error", "Too short. Tap, speak, then tap again.")
                 return
-            self.translate(audio)
+            self.on_audio(audio)
             return
         try:
             self.recorder.start()
         except RuntimeError as e:
-            self.app.alert("error", str(e))
+            self.screen.app.alert("error", str(e))
             return
         self.mic.set_state("recording")
         self._tick()
@@ -151,7 +108,39 @@ class SpeakScreen(Screen):
     def _tick(self) -> None:
         if self.recorder.recording:
             self.mic.set_level(self.recorder.level, self.recorder.elapsed)
-            self.after(50, self._tick)
+            self.screen.after(50, self._tick)
+
+    def stop(self) -> None:
+        if self.recorder.recording:
+            self.recorder.stop()
+            self.mic.set_state("idle")
+
+
+# Speak ----------------------------------------------------------------------------------
+
+
+class SpeakScreen(Screen):
+    """Tap the microphone, speak Rohingya, read and hear the English."""
+
+    def __init__(self, app: App) -> None:
+        super().__init__(app)
+        s = self.s
+        heading(self, "Tap and speak Rohingya").pack(pady=(10 * s, 6 * s))
+        self.mic = MicButton(self, SPEAK, lambda: self.recording.toggle(), diameter=150, scale=s)
+        self.mic.pack()
+        self.recording = Recording(self, self.mic, self.translate)
+        links = tk.Frame(self, bg=BG)
+        links.pack(pady=(0, 18 * s))
+        link(links, "or open a recording", self.open_file, colour=MUTED).pack(side="left")
+        self.demo_link = link(links, "play a demo phrase", self.demo, colour=TEACH)
+        self.result = tk.Frame(self, bg=BG)
+        self.result.pack(fill="x", padx=int(40 * s))
+        self.last_audio: Audio | None = None
+        self.english, self.english_audio = "", None
+        self.say_button: IconButton | None = None
+
+    def show_demo(self) -> None:
+        self.demo_link.pack(side="left", padx=(24 * self.s, 0))
 
     def open_file(self) -> None:
         path = filedialog.askopenfilename(filetypes=AUDIO_TYPES)
@@ -167,11 +156,7 @@ class SpeakScreen(Screen):
             self._demo_next += 1
 
     def on_hide(self) -> None:
-        if self.recorder.recording:
-            self.recorder.stop()
-            self.mic.set_state("idle")
-
-    # translating
+        self.recording.stop()
 
     def translate(self, audio: Audio) -> None:
         self.last_audio = audio
@@ -194,93 +179,115 @@ class SpeakScreen(Screen):
         if self.english_audio is not None:
             play(self.english_audio)
             return
-        text = self.english
-        self.say_button.set_enabled(False)
+        text, button = self.english, self.say_button
+        button.set_enabled(False)
 
         def job():
             return self.app.engine().pipeline().synthesizer.synthesize(text)
 
         def done(audio: Audio) -> None:
-            self.say_button.set_enabled(True)
+            button.set_enabled(True)
             if text == self.english:  # still showing the same result
                 self.english_audio = audio
                 play(audio)
 
-        self.app.run("Reading aloud", job, done,
-                     on_fail=lambda: self.say_button.set_enabled(True))
+        self.app.run("Reading aloud", job, done, on_fail=lambda: button.set_enabled(True))
 
     def show_result(self, result, matches) -> None:
         s = self.s
         clear(self.result)
         self.english, self.english_audio = result.english.text, None
-        top = tk.Frame(self.result, bg=SURFACE)
-        top.pack(fill="x")
+        box = bordered(self.result, padx=int(22 * s), pady=int(18 * s))
+        box.pack(fill="x")
+        row = tk.Frame(box, bg=BG)
+        row.pack(fill="x")
         voice = bool(self.app.config.synthesizer)
-        if voice:  # big button: hear the English
-            self.say_button = IconButton(top, "speaker", "English", self.say_english,
-                                         colour=SPEAK, size=34, scale=s, bg=SURFACE,
-                                         font_size=10)
+        if voice:
+            self.say_button = IconButton(row, "speaker", "", self.say_english, colour=BLUE,
+                                         size=30, scale=s)
             self.say_button.pack(side="left", anchor="n")
-        tk.Label(top, text=result.english.text, font=font(24, "bold"), fg=INK, bg=SURFACE,
-                 wraplength=int(460 * s), justify="left", anchor="w").pack(
+        tk.Label(row, text=result.english.text, font=font(22, "bold"), fg=INK, bg=BG,
+                 wraplength=int(560 * s), justify="left", anchor="w").pack(
             side="left", fill="x", expand=True, padx=(16 * s, 0))
-        # small button: hear the original Rohingya recording again
-        IconButton(top, "mic", "Recording", lambda: self.last_audio and play(self.last_audio),
-                   colour=SPEAK, size=20, filled=False, layout="row", scale=s, bg=SURFACE,
-                   font_size=9).pack(side="right", anchor="n")
 
         sure = (result.english.confidence or 0) >= 0.7
-        row = tk.Frame(self.result, bg=SURFACE)
-        row.pack(anchor="w", pady=(18 * s, 0))
-        ConfidenceDots(row, result.english.confidence, s).pack(side="left")
-        text = "sure" if sure else "not sure: check with an interpreter"
-        tk.Label(row, text=text, font=font(12, "bold"), fg=GOOD if sure else WARN,
-                 bg=SURFACE).pack(side="left", padx=10 * s)
+        info = tk.Frame(box, bg=BG)
+        info.pack(fill="x", pady=(14 * s, 0))
+        caption = "sure" if sure else "not sure: ask an interpreter"
+        Pill(info, "check" if sure else "warning", caption, GOOD if sure else WARN, s).pack(
+            side="left")
+        link(info, "replay recording", lambda: self.last_audio and play(self.last_audio),
+             colour=MUTED, size=10).pack(side="right")
 
-        if voice and self.app.config.read_aloud:
-            self.say_english()
-        if result.transcript:
-            text_block(self.result, f"Rohingya text: {result.transcript.text}", 11, MUTED,
-                       bg=SURFACE).pack(anchor="w", pady=(10 * s, 0))
         if matches:
-            text_block(self.result, "In the dictionary", 11, MUTED, bg=SURFACE,
-                       weight="bold").pack(anchor="w", pady=(22 * s, 6 * s))
-            chips = tk.Frame(self.result, bg=SURFACE)
+            text_block(self.result, "IN YOUR DICTIONARY", 10, MUTED, weight="heavy").pack(
+                anchor="w", pady=(18 * s, 6 * s))
+            chips = tk.Frame(self.result, bg=BG)
             chips.pack(anchor="w")
             for m in matches[:4]:
                 self.app.word_chip(chips, m.entry).pack(side="left", padx=(0, 10 * s))
+        if voice and self.app.config.read_aloud:
+            self.say_english()
 
 
 # Words ----------------------------------------------------------------------------------
 
 
 class WordsScreen(Screen):
-    """Every word as a picture card, coloured by how much it is trusted."""
+    """Every word, as picture cards or a sortable table."""
 
     FILTERS = ("all", "verified", "corroborated", "proposed", "disputed")
+    COLUMNS = (("word", "WORD", 180), ("status", "STATUS", 120), ("speakers", "SPEAKERS", 100),
+               ("photo", "PHOTO CHECK", 120), ("disagree", "DISAGREE", 100),
+               ("spelling", "SPELLING", 140))
 
     def __init__(self, app: App) -> None:
         super().__init__(app)
         s = self.s
-        head = tk.Frame(self, bg=BG)
-        head.pack(fill="x")
-        title_row(head, "book", "Words", WORDS, s).pack(side="left")
-        IconButton(head, "save", "Export", self.export, colour=MUTED, size=22, filled=False,
-                   layout="row", scale=s, font_size=10).pack(side="right")
-        IconButton(head, "search", "Which word?", self.voice_search, colour=WORDS, size=26,
-                   layout="row", scale=s).pack(side="right", padx=10 * s)
+        top = tk.Frame(self, bg=BG)
+        top.pack(fill="x")
+        heading(top, "Words").pack(side="left")
+        self.view = "cards"
+        self.toggle = Segmented(top, [("cards", "grid", "Cards"), ("table", "list", "Table")],
+                                self.set_view, s)
+        self.toggle.select("cards")
+        self.toggle.pack(side="right")
 
-        self.filter_row = tk.Frame(self, bg=BG)
-        self.filter_row.pack(fill="x", pady=(12 * s, 8 * s))
+        tools = tk.Frame(self, bg=BG)
+        tools.pack(fill="x", pady=(16 * s, 10 * s))
+        self.query = tk.StringVar()
+        self.query.trace_add("write", lambda *_: self._render())
+        box = tk.Frame(tools, bg=RAISED, highlightthickness=2, highlightbackground=LINE)
+        box.pack(side="left")
+        glass = tk.Canvas(box, width=34 * s, height=34 * s, bg=RAISED, highlightthickness=0)
+        icons.draw(glass, "search", 18 * s, 17 * s, 20 * s, MUTED)
+        glass.pack(side="left", padx=(4 * s, 0))
+        search = entry(box, self.query, 13, width=20, accent=WORDS)
+        search.configure(highlightthickness=0)
+        search.pack(side="left", ipady=int(5 * s), padx=(0, 8 * s))
+        IconButton(tools, "mic", "", self.voice_search, colour=WORDS, size=20, filled=False,
+                   scale=s).pack(side="left", padx=(8 * s, 0))
+        self.filter_row = tk.Frame(tools, bg=BG)
+        self.filter_row.pack(side="right")
         self.filter = "all"
         self.filter_buttons: dict[str, IconButton] = {}
 
-        self.scroll = ScrollFrame(self)
+        self.content = tk.Frame(self, bg=BG)
+        self.content.pack(fill="both", expand=True)
+        self.scroll = ScrollFrame(self.content)
+        self.scroll.canvas.bind("<Configure>", lambda _: self._render(only_if_resized=True),
+                                add="+")
+        self.table_frame = tk.Frame(self.content, bg=BG)
+        self._build_table()
         self.scroll.pack(fill="both", expand=True)
-        self.entries: list[tuple[Any, list]] = []
+
+        self.entries: list = []
+        self.clip_root = ""
         self.cards: dict[int, tk.Frame] = {}
         self._columns = 0
-        self.scroll.canvas.bind("<Configure>", self._on_resize, add="+")
+        self._sort = ("word", False)
+
+    # data
 
     def on_show(self) -> None:
         self.refresh()
@@ -293,11 +300,17 @@ class WordsScreen(Screen):
         def done(value) -> None:
             self.entries, self.clip_root = value
             self._filters()
-            self._layout(force=True)
+            self._render()
             if then:
                 then()
 
         self.app.run("Reading the dictionary", job, done)
+
+    def _shown(self) -> list:
+        q = self.query.get().strip().lower()
+        return [(e, c) for e, c in self.entries
+                if (self.filter == "all" or e.status.value == self.filter)
+                and (not q or q in e.meaning or q in e.rohingyalish.lower())]
 
     def _filters(self) -> None:
         clear(self.filter_row)
@@ -305,78 +318,169 @@ class WordsScreen(Screen):
         for e, _ in self.entries:
             counts[e.status.value] = counts.get(e.status.value, 0) + 1
         for name in self.FILTERS:
-            colour, icon, caption = STATUS.get(name, (WORDS, "book", "all"))
-            b = IconButton(self.filter_row, icon, f"{caption}  {counts.get(name, 0)}",
-                           lambda n=name: self._set_filter(n), colour=colour, size=18,
-                           filled=False, layout="row", scale=self.s, font_size=10)
+            colour, _, caption = STATUS.get(name, (BLUE, "", "All"))
+            b = IconButton(self.filter_row, "", f"{caption} {counts.get(name, 0)}",
+                           lambda n=name: self._set_filter(n), colour=colour, size=14,
+                           filled=False, layout="row", scale=self.s, font_size=10, upper=True)
             b.set_selected(name == self.filter)
-            b.pack(side="left", padx=(0, 8 * self.s))
+            b.pack(side="left", padx=(6 * self.s, 0))
             self.filter_buttons[name] = b
 
     def _set_filter(self, name: str) -> None:
         self.filter = name
         for n, b in self.filter_buttons.items():
             b.set_selected(n == name)
-        self._layout(force=True)
+        self._render()
 
-    def _on_resize(self, event) -> None:
-        self._layout()
+    def set_view(self, view: str) -> None:
+        self.view = view
+        self.toggle.select(view)
+        if view == "table":
+            self.scroll.pack_forget()
+            self.table_frame.pack(fill="both", expand=True)
+        else:
+            self.table_frame.pack_forget()
+            self.scroll.pack(fill="both", expand=True)
+        self._render()
 
-    def _layout(self, force: bool = False) -> None:
-        card_w = int(180 * self.s)  # 150 px picture + padding and border
-        width = self.scroll.canvas.winfo_width()
-        columns = max(1, width // (card_w + int(16 * self.s)))
-        if columns == self._columns and not force:
+    def _render(self, only_if_resized: bool = False) -> None:
+        if self.view == "table":
+            if not only_if_resized:
+                self._fill_table()
+            return
+        card_w = int(170 * self.s)
+        columns = max(1, self.scroll.canvas.winfo_width() // card_w)
+        if only_if_resized and columns == self._columns:
             return
         self._columns = columns
         clear(self.scroll.inner)
         self.cards = {}
-        shown = [(e, c) for e, c in self.entries
-                 if self.filter == "all" or e.status.value == self.filter]
+        shown = self._shown()
         if not shown:
-            empty = text_block(self.scroll.inner, "No words yet. Use Teach to add the first one."
-                               if not self.entries else "No words with this colour.", 13)
-            empty.grid(row=0, column=0, padx=10, pady=30)
+            text_block(self.scroll.inner, "No words here yet." if self.entries
+                       else "No words yet. Add the first one with Teach.", 14).grid(
+                row=0, column=0, padx=10, pady=40)
             return
         for i, (word, clips) in enumerate(shown):
-            frame = self._card(word, clips)
-            frame.grid(row=i // columns, column=i % columns, padx=int(8 * self.s),
-                       pady=int(8 * self.s), sticky="n")
-            self.cards[word.id] = frame
+            card = self._card(word, clips)
+            card.grid(row=i // columns, column=i % columns, padx=int(6 * self.s),
+                      pady=int(6 * self.s), sticky="n")
+            self.cards[word.id] = card
+
+    # cards
 
     def _card(self, entry, clips) -> tk.Frame:
         s = self.s
-        colour = STATUS[entry.status.value][0]
-        frame = tk.Frame(self.scroll.inner, bg=SURFACE, highlightbackground=colour,
-                         highlightthickness=max(1, int(2 * s)), padx=int(12 * s),
-                         pady=int(12 * s), cursor="hand2")
-        picture = picture_or_icon(frame, self.app.picture_for(entry.meaning), int(150 * s), colour)
+        frame = tk.Frame(self.scroll.inner, bg=BG, highlightbackground=LINE,
+                         highlightthickness=2, padx=int(12 * s), pady=int(12 * s), cursor="hand2")
+        picture = picture_or_icon(frame, self.app.picture_for(entry.meaning), int(124 * s),
+                                  WORDS, bg=BG)
         picture.pack()
-        tk.Label(frame, text=entry.meaning, font=font(15, "bold"), fg=INK, bg=SURFACE).pack(
-            pady=(8 * s, 4 * s))
-        StatusBadge(frame, entry.status.value, s, bg=SURFACE).pack()
-        sp = entry.support
-        AgreementMeter(frame, sp.speakers, self.app.config.lexicon.min_speakers, sp.vision,
-                       sp.conflicts, colour, s, bg=SURFACE).pack(pady=(8 * s, 6 * s))
+        name = tk.Label(frame, text=entry.meaning, font=font(14, "heavy"), fg=INK, bg=BG)
+        name.pack(pady=(8 * s, 4 * s))
+        row = tk.Frame(frame, bg=BG)
+        row.pack(fill="x")
+        StatusBadge(row, entry.status.value, s, bg=BG).pack(side="left")
         if clips:
-            IconButton(frame, "speaker", "", lambda: self.app.play_clip(clips[0]),
-                       colour=colour, size=22, filled=False, scale=s, bg=SURFACE).pack()
-        for widget in (frame, picture):
+            IconButton(row, "speaker", "", lambda: self.app.play_clip(clips[0]), colour=BLUE,
+                       size=16, scale=s, bg=BG).pack(side="right")
+        for widget in (frame, picture, name):
             widget.bind("<Button-1>", lambda _, e=entry, c=clips: self.app.word_details(e, c))
         return frame
 
+    # table
+
+    def _build_table(self) -> None:
+        s = self.s
+        style = ttk.Style(self)
+        style.theme_use("clam")  # the only built-in theme whose colours can all be changed
+        style.configure("Words.Treeview", background=BG, fieldbackground=BG, foreground=INK,
+                        rowheight=int(40 * s), borderwidth=0, font=font(12))
+        style.configure("Words.Treeview.Heading", background=BG, foreground=MUTED,
+                        font=font(10, "heavy"), relief="flat", borderwidth=0, padding=8)
+        style.map("Words.Treeview.Heading", background=[("active", RAISED)])
+        style.map("Words.Treeview", background=[("selected", shade(BLUE, 1.75))],
+                  foreground=[("selected", INK)])
+        style.layout("Words.Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
+        self.table = ttk.Treeview(self.table_frame, style="Words.Treeview",
+                                  columns=[c for c, _, _ in self.COLUMNS], show="tree headings")
+        self.table.column("#0", width=int(52 * s), stretch=False)  # little pictures
+        for key, title, width in self.COLUMNS:
+            self.table.heading(key, text=title, anchor="w", command=lambda k=key: self._sort_by(k))
+            self.table.column(key, width=int(width * s), anchor="w")
+        for status, (colour, _, _) in STATUS.items():
+            self.table.tag_configure(status, foreground=colour)
+        bar = ThinScrollbar(self.table_frame, self.table.yview, bg=BG)
+        self.table.configure(yscrollcommand=bar.set)
+        self.table.pack(side="left", fill="both", expand=True)
+        bar.pack(side="right", fill="y")
+        self.table.bind("<Double-1>", lambda _: self._open_selected())
+        self.table.bind("<Return>", lambda _: self._open_selected())
+        self.table.bind("<space>", lambda _: self._play_selected())
+        self._thumbs: list[tk.PhotoImage] = []
+
+    def _row(self, entry) -> tuple:
+        sp = entry.support
+        return (entry.meaning, STATUS[entry.status.value][2], f"{sp.speakers}",
+                "yes" if sp.vision else "", sp.conflicts or "", entry.rohingyalish)
+
+    def _fill_table(self) -> None:
+        self.table.delete(*self.table.get_children())
+        self._thumbs = []
+        key, reverse = self._sort
+        index = [c for c, _, _ in self.COLUMNS].index(key)
+        rows = sorted(self._shown(), key=lambda ec: str(self._row(ec[0])[index]).zfill(3),
+                      reverse=reverse)
+        for e, _ in rows:
+            thumb = load_picture(self.app.picture_for(e.meaning), int(30 * self.s)) \
+                if self.app.picture_for(e.meaning) else None
+            if thumb is not None:
+                self._thumbs.append(thumb)
+            self.table.insert("", "end", iid=str(e.id), values=self._row(e),
+                              image=thumb or "", tags=(e.status.value,))
+        for k, title, _ in self.COLUMNS:
+            arrow = (" ▼" if reverse else " ▲") if k == key else ""
+            self.table.heading(k, text=title + arrow)
+
+    def _sort_by(self, key: str) -> None:
+        current, reverse = self._sort
+        self._sort = (key, not reverse if key == current else False)
+        self._fill_table()
+
+    def _selected(self):
+        chosen = self.table.selection()
+        if not chosen:
+            return None
+        return next(((e, c) for e, c in self.entries if str(e.id) == chosen[0]), None)
+
+    def _open_selected(self) -> None:
+        found = self._selected()
+        if found:
+            self.app.word_details(*found)
+
+    def _play_selected(self) -> None:
+        found = self._selected()
+        if found and found[1]:
+            self.app.play_clip(found[1][0])
+
+    # finding a word
+
     def highlight(self, entry_id: int) -> None:
+        self.query.set("")
         if self.filter != "all":
             self._set_filter("all")
+        if self.view == "table":
+            self.table.selection_set(str(entry_id))
+            self.table.see(str(entry_id))
+            return
         frame = self.cards.get(entry_id)
         if frame is None:
             return
         self.scroll.scroll_to(frame)
-        original = frame.cget("highlightbackground")
 
         def flash(n: int) -> None:
             if frame.winfo_exists():
-                frame.configure(highlightbackground=WORDS if n % 2 == 0 else original)
+                frame.configure(highlightbackground=BLUE if n % 2 == 0 else LINE)
                 if n < 5:
                     frame.after(250, flash, n + 1)
         flash(0)
@@ -386,7 +490,7 @@ class WordsScreen(Screen):
         if audio is None:
             return
         if audio.duration < MIN_SECONDS:
-            self.app.alert("error", "That was too short. Try again.")
+            self.app.alert("error", "Too short. Try again.")
             return
 
         def done(matches) -> None:
@@ -394,251 +498,229 @@ class WordsScreen(Screen):
             if confident:
                 self.highlight(confident[0].entry.id)
             else:
-                self.app.alert("info", "This word is not in the dictionary yet. "
-                                       "You can add it with Teach.")
+                self.app.alert("info", "That word is not in the dictionary yet. "
+                                       "Add it with Teach.")
 
         self.app.run("Looking up", lambda: self.app.engine().lexicon().lookup(audio), done)
-
-    def export(self) -> None:
-        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")],
-                                            initialfile="lexicon_verified.csv")
-        if not path:
-            return
-
-        def done(n: int) -> None:
-            self.app.alert("done", f"Saved {n} verified recordings to\n{path}")
-
-        self.app.run("Exporting", lambda: self.app.engine().lexicon().export_csv(path), done)
 
 
 # Teach ----------------------------------------------------------------------------------
 
 
 class TeachScreen(Screen):
-    """Three steps: pick a picture, say the word, save."""
+    """A three-step lesson: pick a picture, say the word, save."""
+
+    TITLES = ("What is it?", "Say it in Rohingya", "Who is speaking?")
 
     def __init__(self, app: App) -> None:
         super().__init__(app)
         s = self.s
-        title_row(self, "teach", "Teach a word", TEACH, s).pack(anchor="w")
-        steps = tk.Frame(self, bg=BG)
-        steps.pack(fill="both", expand=True, pady=(12 * s, 0))
-        steps.columnconfigure(0, weight=3)
-        steps.columnconfigure(1, weight=2)
-        steps.columnconfigure(2, weight=2)
-        steps.rowconfigure(0, weight=1)
+        self.progress = ProgressBar(self, int(600 * s), TEACH, s)
+        self.progress.pack(fill="x", pady=(4 * s, 22 * s))
+        self.heading = heading(self, "")
+        self.heading.pack(anchor="w")
+        self.body = tk.Frame(self, bg=BG)
+        self.body.pack(fill="both", expand=True, pady=(16 * s, 0))
+
+        self.footer = tk.Frame(self, bg=BG, pady=int(16 * s))
+        self.footer.pack(fill="x", side="bottom")
+        tk.Frame(self, bg=LINE, height=2).pack(fill="x", side="bottom")
 
         self.meaning = tk.StringVar()
         self.speaker = tk.StringVar()
         self.consent = tk.StringVar()
         for var in (self.meaning, self.speaker, self.consent):
-            var.trace_add("write", lambda *_: self._update_save())
+            var.trace_add("write", lambda *_: self._update_button())
         self.audio: Audio | None = None
         self.photo = None
+        self.step = 0
         self.tiles: dict[str, tk.Frame] = {}
-
-        one = self._step(steps, 0, "1", "picture", "What is it?")
-        self.pictures = ScrollFrame(one, bg=SURFACE)
-        self.pictures.pack(fill="both", expand=True)
-        self.pictures.canvas.bind("<Configure>", self._grid_tiles, add="+")
-        row = tk.Frame(one, bg=SURFACE)
-        row.pack(fill="x", pady=(8 * s, 0))
-        tk.Label(row, text="or type:", font=font(11), fg=MUTED, bg=SURFACE).pack(side="left")
-        entry(row, self.meaning, 14, accent=TEACH).pack(
-            side="left", fill="x", expand=True, padx=(8 * s, 0), ipady=3)
-        self.meaning.trace_add("write", lambda *_: self._mark_tile())
-
-        two = self._step(steps, 1, "2", "mic", "Say it")
-        self.mic = MicButton(two, TEACH, self.toggle, diameter=120, scale=s)
-        self.mic.pack(pady=(6 * s, 0))
-        self.wave = Waveform(two, int(220 * s), int(48 * s), TEACH)
-        self.wave.pack(pady=(4 * s, 8 * s))
-        self.play_button = IconButton(two, "speaker", "Listen", self.listen, colour=TEACH,
-                                      size=22, filled=False, layout="row", scale=s, bg=SURFACE,
-                                      font_size=10)
-        self.play_button.pack()
-        self.play_button.set_enabled(False)
-        self.recorder = Recorder()
-
-        three = self._step(steps, 2, "3", "check", "Save")
-        for label, var, hint in [("Speaker", self.speaker, "e.g. S014"),
-                                 ("Consent", self.consent, "consent record ID")]:
-            r = tk.Frame(three, bg=SURFACE)
-            r.pack(fill="x", pady=3 * s)
-            c = tk.Canvas(r, width=26 * s, height=26 * s, bg=SURFACE, highlightthickness=0)
-            icons.draw(c, "person" if label == "Speaker" else "check", 13 * s, 13 * s, 22 * s,
-                       MUTED)
-            c.pack(side="left")
-            entry(r, var, 12, width=14, accent=TEACH).pack(
-                side="left", fill="x", expand=True, padx=(6 * s, 0), ipady=3)
-            text_block(three, f"{label}: {hint}", 9, MUTED, bg=SURFACE).pack(anchor="w")
-        self.photo_button = IconButton(three, "camera", "Add photo", self.add_photo, colour=SEE,
-                                       size=22, filled=False, layout="row", scale=s, bg=SURFACE,
-                                       font_size=10)
-        self.photo_button.pack(pady=(12 * s, 4 * s))
-        self.save_button = IconButton(three, "check", "Save", self.save, colour=GOOD, size=44,
-                                      scale=s, bg=SURFACE)
-        self.save_button.pack(pady=(10 * s, 0))
-        self.save_button.set_enabled(False)
-
-        self.outcome = tk.Frame(self, bg=BG)
-        self.outcome.pack(fill="x", pady=(12 * s, 0))
-
-    def _step(self, master, column: int, number: str, icon: str, title: str) -> tk.Frame:
-        s = self.s
-        frame = card(master, padx=int(14 * s), pady=int(12 * s))
-        frame.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 12 * s, 0))
-        head = tk.Frame(frame, bg=SURFACE)
-        head.pack(fill="x", pady=(0, 8 * s))
-        size = 34 * s
-        c = tk.Canvas(head, width=size, height=size, bg=SURFACE, highlightthickness=0)
-        c.create_oval(1, 1, size - 1, size - 1, fill=TEACH, outline="")
-        c.create_text(size / 2, size / 2, text=number, fill=ON_ACCENT, font=font(14, "bold"))
-        c.pack(side="left")
-        c2 = tk.Canvas(head, width=size, height=size, bg=SURFACE, highlightthickness=0)
-        icons.draw(c2, icon, size / 2, size / 2, size * 0.8, TEACH)
-        c2.pack(side="left", padx=(8 * s, 0))
-        tk.Label(head, text=title, font=font(15, "bold"), fg=INK, bg=SURFACE).pack(
-            side="left", padx=6 * s)
-        return frame
+        self.main_button: IconButton | None = None
+        self.mic: MicButton | None = None
+        self.recording: Recording | None = None
 
     def on_show(self) -> None:
-        self.load_pictures()
+        self.go(self.step)
 
     def load_pictures(self) -> None:
-        clear(self.pictures.inner)
+        if self.step == 0 and self.winfo_ismapped():
+            self.go(0)
+
+    def start(self, meaning: str = "") -> None:
+        """Begin a new word, keeping the speaker and consent for the next one."""
+        self.meaning.set(meaning)
+        self.audio, self.photo = None, None
+        self.go(0)
+
+    def go(self, step: int) -> None:
+        if self.recording:
+            self.recording.stop()
+        self.step = step
+        self.progress.set(step / 3)
+        self.heading.configure(text=self.TITLES[step])
+        clear(self.body)
+        [self._step_picture, self._step_voice, self._step_speaker][step]()
+        self._footer()
+
+    # steps
+
+    def _step_picture(self) -> None:
+        s = self.s
+        grid = ScrollFrame(self.body)
+        grid.pack(fill="both", expand=True)
         self.tiles = {}
         prompts = self.app.prompts()
         if not prompts:
-            text_block(self.pictures.inner, "Put pictures in the prompts folder, named after "
-                       "what they show (for example water.jpg).", 11, MUTED, bg=SURFACE,
-                       wrap=int(260 * self.s)).pack(pady=20)
-            return
-        size = int(86 * self.s)
-        for meaning, path in prompts.items():
-            tile = tk.Frame(self.pictures.inner, bg=SURFACE, highlightbackground=SURFACE,
-                            highlightthickness=max(2, int(3 * self.s)), cursor="hand2",
-                            padx=2, pady=2)
-            pic = picture_or_icon(tile, path, size, TEACH)
+            text_block(grid.inner, "Put pictures in the prompts folder, named after what they "
+                       "show (for example water.jpg). Or type the word below.", 13).pack(pady=20)
+        size = int(96 * s)
+        columns = max(3, int(self.app.root.winfo_width() - 330 * s) // int(126 * s))
+        for i, (meaning, path) in enumerate(prompts.items()):
+            tile = tk.Frame(grid.inner, bg=BG, highlightbackground=LINE, highlightthickness=2,
+                            cursor="hand2", padx=6, pady=6)
+            pic = picture_or_icon(tile, path, size, TEACH, bg=BG)
             pic.pack()
-            name = tk.Label(tile, text=meaning, font=font(10), fg=INK, bg=SURFACE)
+            name = tk.Label(tile, text=meaning, font=font(11, "bold"), fg=INK, bg=BG)
             name.pack()
             for w in (tile, pic, name):
                 w.bind("<Button-1>", lambda _, m=meaning: self.meaning.set(m))
+            tile.grid(row=i // columns, column=i % columns, padx=5, pady=5)
             self.tiles[meaning] = tile
-        self._grid_tiles()
+        row = tk.Frame(self.body, bg=BG)
+        row.pack(fill="x", pady=(12 * s, 0))
+        text_block(row, "or type a word", 11, MUTED, weight="heavy").pack(side="left")
+        box = entry(row, self.meaning, 14, accent=TEACH)
+        box.pack(side="left", fill="x", expand=True, padx=(12 * s, 0), ipady=int(5 * s))
         self._mark_tile()
-
-    def _grid_tiles(self, event=None) -> None:
-        """As many picture columns as fit the step's width."""
-        width = self.pictures.canvas.winfo_width()
-        columns = max(2, width // int(100 * self.s)) if width > 1 else 3
-        for i, tile in enumerate(self.tiles.values()):
-            tile.grid(row=i // columns, column=i % columns, padx=3, pady=3)
 
     def _mark_tile(self) -> None:
         chosen = self.meaning.get().strip().lower()
         for meaning, tile in self.tiles.items():
-            tile.configure(highlightbackground=TEACH if meaning == chosen else SURFACE)
+            on = meaning == chosen
+            colour = BLUE if on else LINE
+            tile.configure(highlightbackground=colour, bg=shade(BLUE, 1.85) if on else BG)
+            for child in tile.winfo_children():
+                child.configure(bg=shade(BLUE, 1.85) if on else BG)
 
-    def toggle(self) -> None:
-        if self.recorder.recording:
-            audio = self.recorder.stop()
-            self.mic.set_state("idle")
-            if audio.duration < MIN_SECONDS:
-                self.app.alert("error", "That was too short. Tap, say the word, tap again.")
-                return
-            self.set_audio(audio)
-            return
-        try:
-            self.recorder.start()
-        except RuntimeError as e:
-            self.app.alert("error", str(e))
-            return
-        self.mic.set_state("recording")
-        self._tick()
+    def _step_voice(self) -> None:
+        s = self.s
+        word = tk.Frame(self.body, bg=BG)
+        word.pack(pady=(0, 6 * s))
+        meaning = self.meaning.get().strip().lower()
+        picture_or_icon(word, self.app.picture_for(meaning), int(64 * s), TEACH, bg=BG).pack(
+            side="left")
+        tk.Label(word, text=meaning, font=font(20, "heavy"), fg=INK, bg=BG).pack(
+            side="left", padx=12 * s)
+        self.mic = MicButton(self.body, TEACH, lambda: self.recording.toggle(), diameter=130,
+                             scale=s)
+        self.mic.pack()
+        self.recording = Recording(self, self.mic, self._set_audio)
+        self.wave = Waveform(self.body, int(300 * s), int(52 * s), TEACH)
+        self.wave.pack()
+        self.wave.show(self.audio.samples if self.audio is not None else None)
+        self.listen = link(self.body, "listen", lambda: self.audio is not None and play(self.audio),
+                           colour=BLUE)
+        self.listen.pack(pady=(10 * s, 0))
 
-    def _tick(self) -> None:
-        if self.recorder.recording:
-            self.mic.set_level(self.recorder.level, self.recorder.elapsed)
-            self.after(50, self._tick)
-
-    def set_audio(self, audio: Audio | None) -> None:
+    def _set_audio(self, audio: Audio) -> None:
         self.audio = audio
-        self.wave.show(audio.samples if audio is not None else None)
-        self.play_button.set_enabled(audio is not None)
-        self._update_save()
+        self.wave.show(audio.samples)
+        self._update_button()
 
-    def listen(self) -> None:
-        if self.audio is not None:
-            play(self.audio)
+    def _step_speaker(self) -> None:
+        s = self.s
+        form = tk.Frame(self.body, bg=BG)
+        form.pack(anchor="w", fill="x")
+        for label, var, hint in [("SPEAKER ID", self.speaker, "a code like S014, never a name"),
+                                 ("CONSENT ID", self.consent, "the speaker's consent record")]:
+            text_block(form, label, 10, MUTED, weight="heavy").pack(anchor="w", pady=(10 * s, 4))
+            entry(form, var, 14, width=30, accent=TEACH).pack(anchor="w", ipady=int(6 * s))
+            text_block(form, hint, 10, MUTED).pack(anchor="w", pady=(4, 0))
+        self.photo_button = IconButton(form, "camera", "Photo added" if self.photo is not None
+                                       else "Add a photo (optional)", self._add_photo,
+                                       colour=SEE, size=20, filled=False, layout="row", scale=s,
+                                       font_size=10, upper=True)
+        self.photo_button.pack(anchor="w", pady=(22 * s, 0))
 
-    def add_photo(self) -> None:
+    def _add_photo(self) -> None:
         photo = dialogs.take_photo(self.app.root, self.s, SEE)
         if photo is not None:
             self.photo = photo
-            self.photo_button.configure_button(icon="check", text="Photo added")
+            self.photo_button.configure_button(text="PHOTO ADDED")
 
-    def _update_save(self) -> None:
-        ready = bool(self.audio is not None and self.meaning.get().strip()
-                     and self.speaker.get().strip() and self.consent.get().strip())
-        self.save_button.set_enabled(ready)
+    # footer and saving
 
-    def on_hide(self) -> None:
-        if self.recorder.recording:
-            self.recorder.stop()
-            self.mic.set_state("idle")
+    def _footer(self, outcome=None) -> None:
+        s = self.s
+        clear(self.footer)
+        self.footer.configure(bg=BG)
+        if outcome is not None:
+            self._outcome(*outcome)
+            return
+        if self.step > 0:
+            link(self.footer, "back", lambda: self.go(self.step - 1), colour=MUTED).pack(
+                side="left")
+        last = self.step == 2
+        self.main_button = IconButton(self.footer, "", "Save" if last else "Continue",
+                                      self.save if last else lambda: self.go(self.step + 1),
+                                      colour=TEACH, size=20, layout="row", scale=s,
+                                      font_size=13, upper=True, min_width=180)
+        self.main_button.pack(side="right")
+        self._update_button()
+
+    def _update_button(self) -> None:
+        if self.step == 0:
+            self._mark_tile()
+        if self.main_button is None or not self.main_button.winfo_exists():
+            return
+        ready = [bool(self.meaning.get().strip()), self.audio is not None,
+                 bool(self.speaker.get().strip() and self.consent.get().strip())][self.step]
+        self.main_button.set_enabled(ready)
 
     def save(self) -> None:
         audio, photo, meaning = self.audio, self.photo, self.meaning.get()
-        chosen_picture = meaning.strip().lower() in self.tiles
         args = {"speaker_id": self.speaker.get(), "consent_id": self.consent.get(),
-                "source": "prompt" if chosen_picture else "teach"}
+                "source": "prompt" if meaning.strip().lower() in self.app.prompts() else "teach"}
 
         def job():
             lex = self.app.engine().lexicon(vision=photo is not None)
             return lex.teach(audio, meaning, image=photo, **args), lex.vision_is_placeholder
 
         def done(value) -> None:
-            result, placeholder = value
-            self.show_outcome(result, placeholder)
-            self.set_audio(None)
-            self.photo = None
-            self.photo_button.configure_button(icon="camera", text="Add photo")
-            self.meaning.set("")
+            self.progress.set(1.0)
+            self._footer(outcome=value)
             self.app.words.refresh()
 
         self.app.run("Saving", job, done)
 
-    def show_outcome(self, result, placeholder: bool) -> None:
+    def _outcome(self, result, placeholder: bool) -> None:
+        """A Duolingo-style banner: what was saved and how trusted it is now."""
         s = self.s
-        clear(self.outcome)
-        e = result.entry
-        colour = STATUS[e.status.value][0]
-        box = tk.Frame(self.outcome, bg=SURFACE, highlightbackground=colour,
-                       highlightthickness=max(1, int(2 * s)), padx=int(14 * s), pady=int(10 * s))
-        box.pack(fill="x")
-        size = 40 * s
-        c = tk.Canvas(box, width=size, height=size, bg=SURFACE, highlightthickness=0)
-        icons.draw(c, "check", size / 2, size / 2, size, GOOD)
-        c.pack(side="left")
-        tk.Label(box, text=e.meaning, font=font(16, "bold"), fg=INK, bg=SURFACE).pack(
-            side="left", padx=(10 * s, 12 * s))
-        StatusBadge(box, e.status.value, s, bg=SURFACE).pack(side="left")
-        sp = e.support
-        AgreementMeter(box, sp.speakers, self.app.config.lexicon.min_speakers, sp.vision,
-                       sp.conflicts, colour, s, bg=SURFACE).pack(side="left", padx=12 * s)
+        tint = shade(GOOD, 1.85)
+        self.footer.configure(bg=tint)
+        size = 52 * s
+        c = tk.Canvas(self.footer, width=size, height=size, bg=tint, highlightthickness=0)
+        c.create_oval(2, 2, size - 2, size - 2, fill=GOOD, outline="")
+        icons.draw(c, "check", size / 2, size / 2, size * 0.6, BG)
+        c.pack(side="left", padx=(16 * s, 12 * s))
+        text = tk.Frame(self.footer, bg=tint)
+        text.pack(side="left")
+        tk.Label(text, text=f"Saved: {result.entry.meaning}", font=font(16, "heavy"), fg=GOOD,
+                 bg=tint).pack(anchor="w")
         notes = []
         if result.vision:
             notes.append("photo agrees" if result.vision.agrees
-                         else f"photo looks like: {result.vision.top_label}")
-            if placeholder:
-                notes.append("(stand-in image model)")
+                         else f"photo looks like {result.vision.top_label}")
         for other in result.conflicts:
             notes.append(f"sounds like '{other.meaning}': marked unclear")
         if notes:
-            text_block(box, "\n".join(notes), 11, WARN if result.conflicts else MUTED,
-                       bg=SURFACE).pack(side="left", padx=8 * s)
+            tk.Label(text, text=" · ".join(notes), font=font(10), fg=INK, bg=tint).pack(anchor="w")
+        StatusBadge(self.footer, result.entry.status.value, s, bg=tint).pack(
+            side="left", padx=14 * s)
+        IconButton(self.footer, "", "Teach another", lambda: self.start(), colour=GOOD,
+                   size=20, layout="row", scale=s, font_size=13, upper=True, bg=tint,
+                   min_width=200).pack(side="right", padx=(0, 16 * s))
+        self.audio, self.photo = None, None
 
     def prefill_demo(self) -> None:
         files = self.app.demo_files
@@ -649,7 +731,12 @@ class TeachScreen(Screen):
         self.meaning.set("house")
         self.speaker.set(NEW_SPEAKER)
         self.consent.set(CONSENT)
-        self.set_audio(load_wav(files.word.with_name("word_house.wav")))
+        self.audio = load_wav(files.word.with_name("word_house.wav"))
+        self._mark_tile()
+
+    def on_hide(self) -> None:
+        if self.recording:
+            self.recording.stop()
 
 
 # See ------------------------------------------------------------------------------------
@@ -661,45 +748,44 @@ class SeeScreen(Screen):
     def __init__(self, app: App) -> None:
         super().__init__(app)
         s = self.s
-        title_row(self, "camera", "See", SEE, s).pack(anchor="w")
+        heading(self, "Show me something").pack(anchor="w")
         body = tk.Frame(self, bg=BG)
-        body.pack(fill="both", expand=True, pady=(12 * s, 0))
+        body.pack(fill="both", expand=True, pady=(18 * s, 0))
 
         left = tk.Frame(body, bg=BG)
         left.pack(side="left", fill="y")
-        self.view_w, self.view_h = int(440 * s), int(330 * s)
+        self.view_w, self.view_h = int(420 * s), int(315 * s)
         self.view = tk.Canvas(left, width=self.view_w, height=self.view_h, bg=CAMERA_BG,
-                              highlightthickness=0, cursor="hand2")
+                              highlightthickness=2, highlightbackground=LINE, cursor="hand2")
         self.view.pack()
         self.view.bind("<Button-1>", lambda _: self.camera is None and self.start_camera())
-        buttons = tk.Frame(left, bg=BG)
-        buttons.pack(pady=(12 * s, 0))
-        self.shoot = IconButton(buttons, "camera", "Take picture", self.take, colour=SEE, size=30,
-                                layout="row", scale=s)
-        self.shoot.pack(side="left", padx=4)
-        IconButton(buttons, "folder", "Open photo", self.open_file, colour=SEE, size=22,
-                   filled=False, layout="row", scale=s, font_size=10).pack(side="left", padx=4)
-        self.demo_button = IconButton(buttons, "play", "Demo picture", self.demo, colour=TEACH,
-                                      size=22, filled=False, layout="row", scale=s, font_size=10)
+        self.shoot = IconButton(left, "camera", "Take picture", self.take, colour=SEE, size=24,
+                                layout="row", scale=s, font_size=13, upper=True,
+                                min_width=420)
+        self.shoot.pack(pady=(16 * s, 8 * s))
+        links = tk.Frame(left, bg=BG)
+        links.pack()
+        link(links, "or open a photo", self.open_file, colour=MUTED).pack(side="left")
+        self.demo_link = link(links, "show a demo picture", self.demo, colour=TEACH)
 
-        self.results = card(body, padx=int(18 * s), pady=int(14 * s))
-        self.results.pack(side="left", fill="both", expand=True, padx=(24 * s, 0))
+        self.results = tk.Frame(body, bg=BG)
+        self.results.pack(side="left", fill="both", expand=True, padx=(32 * s, 0))
         self.camera = None
         self.frame = None
         self._idle_view()
-        text_block(self.results, "Words for the picture appear here. Tap a word's teach button "
-                   "to record its Rohingya name.", 12, MUTED, bg=SURFACE,
-                   wrap=int(320 * s)).pack(pady=30 * s)
+        text_block(self.results, "Take a picture, and the words for it appear here. "
+                   "Tap TEACH to record a word's Rohingya name.", 13, MUTED,
+                   wrap=int(320 * s)).pack(anchor="w")
 
     def show_demo(self) -> None:
-        self.demo_button.pack(side="left", padx=4)
+        self.demo_link.pack(side="left", padx=(24 * self.s, 0))
 
     def _idle_view(self) -> None:
         self.view.delete("all")
         icons.draw(self.view, "camera", self.view_w / 2, self.view_h / 2 - 16 * self.s,
-                   90 * self.s, LINE)
-        self.view.create_text(self.view_w / 2, self.view_h / 2 + 60 * self.s,
-                              text="Tap to start the camera", fill=MUTED, font=font(12))
+                   80 * self.s, LINE)
+        self.view.create_text(self.view_w / 2, self.view_h / 2 + 52 * self.s,
+                              text="TAP TO START THE CAMERA", fill=MUTED, font=font(11, "heavy"))
 
     def start_camera(self) -> None:
         try:
@@ -763,51 +849,47 @@ class SeeScreen(Screen):
     def demo(self) -> None:
         files = self.app.demo_files
         if files and files.picture:
-            self.open_path(files.picture.with_name("fish.png"))
+            pictures = sorted(files.picture.parent.glob("*.png"))
+            self._demo_next = getattr(self, "_demo_next", 0)
+            self.open_path(pictures[self._demo_next % len(pictures)])
+            self._demo_next += 7  # jump around the library
 
     def look_at(self, image) -> None:
         self._show_image(image)
-        self.shoot.configure_button(text="New picture")
+        self.shoot.configure_button(text="NEW PICTURE")
 
         def job():
             lex = self.app.engine().lexicon(vision=True)
-            return lex.suggest(image, limit=6), lex.vision_is_placeholder
+            return lex.suggest(image, limit=5), lex.vision_is_placeholder
 
         self.app.run("Looking at the picture", job, lambda v: self.show_labels(*v))
 
     def show_labels(self, labels, placeholder: bool) -> None:
         s = self.s
         clear(self.results)
-        if placeholder:
-            note = tk.Frame(self.results, bg=SURFACE)
-            note.pack(fill="x", pady=(0, 10 * s))
-            c = tk.Canvas(note, width=24 * s, height=24 * s, bg=SURFACE, highlightthickness=0)
-            icons.draw(c, "warning", 12 * s, 12 * s, 22 * s, WARN)
-            c.pack(side="left")
-            text_block(note, "Stand-in image model: it does not really see. Choose the "
-                             "models settings for real results.", 10, WARN, bg=SURFACE,
-                       wrap=int(300 * s)).pack(side="left", padx=6)
+        tk.Label(self.results, text="I SEE", font=font(11, "heavy"), fg=MUTED, bg=BG).pack(
+            anchor="w", pady=(0, 8 * s))
         best = labels[0].score if labels else 0
         for label in labels:
-            row = tk.Frame(self.results, bg=SURFACE)
+            row = tk.Frame(self.results, bg=BG, highlightbackground=LINE, highlightthickness=2,
+                           padx=int(10 * s), pady=int(8 * s))
             row.pack(fill="x", pady=4 * s)
-            picture_or_icon(row, self.app.picture_for(label.text), int(48 * s), SEE).pack(
+            picture_or_icon(row, self.app.picture_for(label.text), int(46 * s), SEE, bg=BG).pack(
                 side="left")
-            mid = tk.Frame(row, bg=SURFACE)
-            mid.pack(side="left", fill="x", expand=True, padx=10 * s)
-            tk.Label(mid, text=label.text, font=font(14, "bold"), fg=INK, bg=SURFACE,
+            mid = tk.Frame(row, bg=BG)
+            mid.pack(side="left", fill="x", expand=True, padx=12 * s)
+            tk.Label(mid, text=label.text, font=font(14, "heavy"), fg=INK, bg=BG,
                      anchor="w").pack(fill="x")
-            bar_w, bar_h = int(180 * s), int(10 * s)
-            bar = tk.Canvas(mid, width=bar_w, height=bar_h, bg=SURFACE, highlightthickness=0)
-            icons.round_rect(bar, 0, 0, bar_w, bar_h, bar_h / 2, fill=LINE, outline="")
-            share = label.score / best if best > 0 else 0
-            if share > 0:
-                icons.round_rect(bar, 0, 0, max(bar_h, bar_w * share), bar_h, bar_h / 2,
-                                 fill=SEE, outline="")
-            bar.pack(anchor="w", pady=(2, 0))
-            IconButton(row, "teach", "", lambda m=label.text: self.app.teach_word(m),
-                       colour=TEACH, size=22, filled=False, scale=s, bg=SURFACE).pack(
-                side="right")
+            bar = ProgressBar(mid, int(170 * s), SEE, s, height=10)
+            bar.set(label.score / best if best > 0 else 0)
+            bar.pack(anchor="w", pady=(4, 0))
+            IconButton(row, "", "Teach", lambda m=label.text: self.app.teach_word(m),
+                       colour=TEACH, size=14, filled=False, layout="row", scale=s,
+                       font_size=10, upper=True).pack(side="right")
+        if placeholder:
+            text_block(self.results, "Stand-in image model: it doesn't really see. Choose the "
+                       "models settings for real results.", 10, MUTED, wrap=int(360 * s)).pack(
+                anchor="w", pady=(10 * s, 0))
 
     def on_hide(self) -> None:
         self.stop_camera()

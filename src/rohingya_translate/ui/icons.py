@@ -166,11 +166,24 @@ def _play(d: _Pen) -> None:
     d.poly(-0.22, -0.32, 0.34, 0, -0.22, 0.32)
 
 
+def _grid(d: _Pen) -> None:
+    for x in (-0.38, 0.06):
+        for y in (-0.38, 0.06):
+            d.rrect(x, y, x + 0.32, y + 0.32, 0.06, fill=d.colour)
+
+
+def _list(d: _Pen) -> None:
+    for y in (-0.28, 0, 0.28):
+        d.oval(-0.42, y - 0.06, -0.3, y + 0.06, fill=d.colour)
+        d.line(-0.16, y, 0.42, y, width=d.w * 1.2)
+
+
 ICONS: dict[str, Callable[[_Pen], None]] = {
     "mic": _mic, "speaker": _speaker, "book": _book, "teach": _teach, "camera": _camera,
     "check": _check, "check2": _check2, "dot": _dot, "warning": _warning, "stop": _stop,
     "folder": _folder, "gear": _gear, "person": _person, "picture": _picture,
     "search": _search, "save": _save, "redo": _redo, "close": _close, "play": _play,
+    "grid": _grid, "list": _list,
 }
 
 
