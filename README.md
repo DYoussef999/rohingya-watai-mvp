@@ -23,7 +23,7 @@ Each box is a small interface in [`stages/base.py`](src/rohingya_translate/stage
 
 Double-click **`run.bat`**. The first time, it sets up the Python packages (needs internet once), then it opens the app.
 
-To see every tab filled in, double-click **`demo.bat`** instead. It builds made-up demo data in `data/demo/` (tone-pattern "recordings", coloured picture cards, a dictionary with entries in every status) and opens the app with `configs/demo.toml`. The data is rebuilt fresh on each launch and never touches the real dictionary. Nothing in it is real Rohingya.
+To see every tab filled in, double-click **`demo.bat`** instead. It builds made-up demo data in `data/demo/` (about 45 words with coloured picture cards, 15 phrases, 6 demo speakers, and dictionary entries in every status, all with tone-pattern "recordings") and opens the app with `configs/demo.toml`. The data is rebuilt fresh on each launch and never touches the real dictionary. Nothing in it is real Rohingya.
 
 ## Setup (Windows)
 

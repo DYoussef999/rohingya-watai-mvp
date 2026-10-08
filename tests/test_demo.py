@@ -1,6 +1,6 @@
 from rohingya_translate.audio import load_wav
 from rohingya_translate.config import load_config
-from rohingya_translate.demo import DEMO_CONFIG, PHRASES, build_demo
+from rohingya_translate.demo import DEMO_CONFIG, DISPUTES, PHRASES, TEACHING, build_demo
 from rohingya_translate.lexicon import Lexicon, Status
 from rohingya_translate.stages.demo import DemoBackend
 
@@ -27,6 +27,8 @@ def test_demo_dictionary_shows_every_status(tmp_path):
     assert status["fish"] == Status.CORROBORATED  # one speaker + picture check
     assert status["house"] == Status.PROPOSED
     assert status["pain"] == status["fever"] == Status.DISPUTED
+    assert status["cold"] == status["winter"] == Status.DISPUTED
+    assert set(status.values()) == set(Status)  # every status is on show
 
 
 def test_demo_phrasebook_translates_demo_recordings(tmp_path):
@@ -36,6 +38,8 @@ def test_demo_phrasebook_translates_demo_recordings(tmp_path):
     translator = DemoBackend(config.speech_translator)
     assert translator.translate_speech(load_wav(files.phrase)).text == PHRASES[2]
     assert translator.translate_speech(load_wav(files.word)).text == "water"
+    for path, english in zip(files.phrases, PHRASES):  # every demo sound is distinct
+        assert translator.translate_speech(load_wav(path)).text == english
 
 
 def test_demo_rebuild_starts_fresh(tmp_path):
@@ -44,6 +48,6 @@ def test_demo_rebuild_starts_fresh(tmp_path):
     build_demo(config, reset=True)
     lex = Lexicon.open(config)
     try:
-        assert len(lex.entries()) == 9
+        assert len(lex.entries()) == len(TEACHING) + 2 * len(DISPUTES)
     finally:
         lex.close()

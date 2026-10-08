@@ -13,7 +13,7 @@ It takes about 15 minutes.
 
 The first time, a black window appears and spends a few minutes setting things up. Then the app window opens. After that, double-clicking `run.bat` opens the app straight away. Keep the black window open while you use the app; it shows progress and any error messages.
 
-To look around with example data already filled in, double-click **`demo.bat`** instead. It opens the same app (with "demo data" in the title bar), pre-filled with made-up recordings, picture cards and dictionary entries. Each tab has a hint telling you what to click. The demo is rebuilt fresh every time and kept separate from the real dictionary. Its "recordings" are tone patterns, not speech, so the demo can only recognise its own files.
+To look around with example data already filled in, double-click **`demo.bat`** instead. It opens the same app (with "demo data" in the title bar), pre-filled with made-up data: about 45 words with picture cards, 15 phrases (tap **Demo recording** repeatedly to go through them), and dictionary entries in every status. Each tab has a hint telling you what to click. The demo is rebuilt fresh every time and kept separate from the real dictionary. Its "recordings" are tone patterns, not speech, so the demo can only recognise its own files.
 
 If that works, skip ahead to [Using the app](#using-the-app). The steps below do the same setup by hand, which helps when something goes wrong or when you want to use the command line.
 
